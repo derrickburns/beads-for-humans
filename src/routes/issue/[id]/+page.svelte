@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { issueStore } from '$lib/stores/issues.svelte';
 	import { PRIORITY_LABELS, TYPE_LABELS, STATUS_LABELS } from '$lib/types/issue';
-	import type { IssueStatus } from '$lib/types/issue';
+	import type { IssueStatus, RelationshipSuggestion } from '$lib/types/issue';
 	import IssueForm from '$lib/components/IssueForm.svelte';
 	import SuggestedActions from '$lib/components/SuggestedActions.svelte';
 
@@ -14,6 +14,75 @@
 
 	let editing = $state(false);
 	let showDeleteConfirm = $state(false);
+	let showAddDependency = $state(false);
+
+	// AI dependency suggestions state
+	let depSuggestions = $state<RelationshipSuggestion[]>([]);
+	let loadingDepSuggestions = $state(false);
+	let dismissedDepSuggestions = $state<Set<string>>(new Set());
+
+	// Available issues for manual dependency selection (not self, not already a dependency)
+	let availableForDependency = $derived(
+		issueStore.issues.filter(
+			(i) => i.id !== issue?.id && !issue?.dependencies.includes(i.id) && i.status !== 'closed'
+		)
+	);
+
+	// Active dependency suggestions (not dismissed, not already added)
+	let activeDepSuggestions = $derived(
+		depSuggestions.filter(
+			(s) =>
+				!dismissedDepSuggestions.has(s.targetId) &&
+				!issue?.dependencies.includes(s.targetId) &&
+				s.type === 'dependency'
+		)
+	);
+
+	async function loadDepSuggestions() {
+		if (!issue) return;
+		loadingDepSuggestions = true;
+		try {
+			const response = await fetch('/api/suggest-relationships', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					issue: { title: issue.title, description: issue.description },
+					existingIssues: issueStore.issues.filter((i) => i.id !== issue.id)
+				})
+			});
+			if (response.ok) {
+				const data = await response.json();
+				depSuggestions = data.suggestions || [];
+			}
+		} catch {
+			depSuggestions = [];
+		} finally {
+			loadingDepSuggestions = false;
+		}
+	}
+
+	function acceptDepSuggestion(suggestion: RelationshipSuggestion) {
+		if (issue) {
+			issueStore.addDependency(issue.id, suggestion.targetId);
+		}
+	}
+
+	function dismissDepSuggestion(suggestion: RelationshipSuggestion) {
+		dismissedDepSuggestions = new Set([...dismissedDepSuggestions, suggestion.targetId]);
+	}
+
+	function addManualDependency(depId: string) {
+		if (issue) {
+			issueStore.addDependency(issue.id, depId);
+			showAddDependency = false;
+		}
+	}
+
+	function removeDependency(depId: string) {
+		if (issue) {
+			issueStore.removeDependency(issue.id, depId);
+		}
+	}
 
 	const statusColors: Record<string, string> = {
 		open: 'bg-green-100 text-green-800',
@@ -154,22 +223,147 @@
 					</div>
 				</div>
 
-				<!-- Blockers -->
+				<!-- Dependencies Section -->
+				<div>
+					<div class="flex items-center justify-between mb-2">
+						<h3 class="text-sm font-medium text-gray-500">
+							Dependencies ({issue.dependencies.length})
+						</h3>
+						<div class="flex items-center gap-2">
+							{#if availableForDependency.length > 0}
+								<button
+									onclick={() => (showAddDependency = !showAddDependency)}
+									class="text-xs font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1"
+								>
+									<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+									</svg>
+									Add
+								</button>
+							{/if}
+							<button
+								onclick={loadDepSuggestions}
+								disabled={loadingDepSuggestions}
+								class="text-xs font-medium text-purple-600 hover:text-purple-700 disabled:opacity-50 flex items-center gap-1"
+							>
+								{#if loadingDepSuggestions}
+									<span class="w-3 h-3 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin"></span>
+									Analyzing...
+								{:else}
+									<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+									</svg>
+									AI Suggest
+								{/if}
+							</button>
+						</div>
+					</div>
+
+					<!-- Manual Add Dropdown -->
+					{#if showAddDependency && availableForDependency.length > 0}
+						<div class="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+							<p class="text-xs text-gray-500 mb-2">Select an issue this depends on:</p>
+							<div class="space-y-1 max-h-40 overflow-y-auto">
+								{#each availableForDependency as dep}
+									<button
+										onclick={() => addManualDependency(dep.id)}
+										class="w-full text-left px-3 py-2 text-sm rounded hover:bg-gray-100 transition-colors flex items-center justify-between"
+									>
+										<span class="truncate">{dep.title}</span>
+										<span class="text-xs text-gray-400 ml-2">P{dep.priority}</span>
+									</button>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
+					<!-- AI Suggestions -->
+					{#if activeDepSuggestions.length > 0}
+						<div class="mb-3 space-y-2">
+							{#each activeDepSuggestions as suggestion}
+								{@const targetIssue = issueStore.getById(suggestion.targetId)}
+								{#if targetIssue}
+									<div class="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+										<div class="flex items-start justify-between gap-2">
+											<div class="flex-1 min-w-0">
+												<p class="text-sm font-medium text-gray-900 truncate">{targetIssue.title}</p>
+												<p class="text-xs text-purple-600 mt-1">{suggestion.reason}</p>
+												<span class="text-xs text-gray-400">Confidence: {Math.round(suggestion.confidence * 100)}%</span>
+											</div>
+											<div class="flex items-center gap-1">
+												<button
+													onclick={() => acceptDepSuggestion(suggestion)}
+													class="px-2 py-1 text-xs font-medium text-white bg-green-600 rounded hover:bg-green-700 transition-colors"
+												>
+													Accept
+												</button>
+												<button
+													onclick={() => dismissDepSuggestion(suggestion)}
+													class="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded hover:bg-gray-200 transition-colors"
+												>
+													Ignore
+												</button>
+											</div>
+										</div>
+									</div>
+								{/if}
+							{/each}
+						</div>
+					{/if}
+
+					<!-- Current Dependencies -->
+					{#if issue.dependencies.length > 0}
+						<div class="space-y-2">
+							{#each issue.dependencies as depId}
+								{@const dep = issueStore.getById(depId)}
+								{#if dep}
+									<div class="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+										<div
+											class="w-2 h-2 rounded-full {dep.status === 'closed'
+												? 'bg-gray-400'
+												: dep.status === 'in_progress'
+													? 'bg-blue-500'
+													: 'bg-green-500'}"
+										></div>
+										<a href="/issue/{dep.id}" class="flex-1 font-medium text-gray-900 hover:text-blue-600 truncate">
+											{dep.title}
+										</a>
+										<span class="text-xs text-gray-500">{STATUS_LABELS[dep.status]}</span>
+										<button
+											onclick={() => removeDependency(dep.id)}
+											class="p-1 text-gray-400 hover:text-red-600 transition-colors"
+											title="Remove dependency"
+										>
+											<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+											</svg>
+										</button>
+									</div>
+								{/if}
+							{/each}
+						</div>
+					{:else}
+						<p class="text-sm text-gray-400">No dependencies</p>
+					{/if}
+				</div>
+
+				<!-- Blockers (computed - these are unresolved dependencies) -->
 				{#if blockers.length > 0}
 					<div>
 						<h3 class="text-sm font-medium text-gray-500 mb-2">
 							Blocked by ({blockers.length})
 						</h3>
+						<p class="text-xs text-gray-400 mb-2">These dependencies must be completed first</p>
 						<div class="space-y-2">
 							{#each blockers as blocker}
 								<a
 									href="/issue/{blocker.id}"
-									class="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
+									class="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
 								>
 									<div
 										class="w-2 h-2 rounded-full {blocker.status === 'in_progress'
 											? 'bg-blue-500'
-											: 'bg-green-500'}"
+											: 'bg-amber-500'}"
 									></div>
 									<span class="font-medium text-gray-900">{blocker.title}</span>
 									<span class="text-xs text-gray-500">
