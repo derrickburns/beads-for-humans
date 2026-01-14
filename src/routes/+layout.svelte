@@ -72,44 +72,42 @@
 
 <!-- Keyboard Shortcuts Modal -->
 {#if showShortcuts}
-	<div
-		class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-		onclick={() => (showShortcuts = false)}
-		onkeydown={(e) => { if (e.key === 'Escape') showShortcuts = false; }}
-		role="dialog"
-		aria-modal="true"
-		tabindex="-1"
-	>
-		<div
-			class="bg-white rounded-xl p-6 max-w-sm mx-4 shadow-xl"
-			onclick={(e) => e.stopPropagation()}
-			role="document"
-		>
-			<h3 class="text-lg font-semibold text-gray-900 mb-4">Keyboard Shortcuts</h3>
-			<div class="space-y-3">
-				<div class="flex items-center justify-between">
-					<span class="text-gray-600">New issue</span>
-					<kbd class="px-2 py-1 text-sm bg-gray-100 rounded font-mono">n</kbd>
+	<div class="fixed inset-0 z-50">
+		<button
+			type="button"
+			class="absolute inset-0 bg-black/50 w-full h-full cursor-default"
+			onclick={() => (showShortcuts = false)}
+			aria-label="Close modal"
+		></button>
+		<div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+			<div class="bg-white rounded-xl p-6 max-w-sm mx-4 shadow-xl pointer-events-auto">
+				<h3 class="text-lg font-semibold text-gray-900 mb-4">Keyboard Shortcuts</h3>
+				<div class="space-y-3">
+					<div class="flex items-center justify-between">
+						<span class="text-gray-600">New issue</span>
+						<kbd class="px-2 py-1 text-sm bg-gray-100 rounded font-mono">n</kbd>
+					</div>
+					<div class="flex items-center justify-between">
+						<span class="text-gray-600">Go home</span>
+						<kbd class="px-2 py-1 text-sm bg-gray-100 rounded font-mono">h</kbd>
+					</div>
+					<div class="flex items-center justify-between">
+						<span class="text-gray-600">Show shortcuts</span>
+						<kbd class="px-2 py-1 text-sm bg-gray-100 rounded font-mono">?</kbd>
+					</div>
+					<div class="flex items-center justify-between">
+						<span class="text-gray-600">Close dialog</span>
+						<kbd class="px-2 py-1 text-sm bg-gray-100 rounded font-mono">Esc</kbd>
+					</div>
 				</div>
-				<div class="flex items-center justify-between">
-					<span class="text-gray-600">Go home</span>
-					<kbd class="px-2 py-1 text-sm bg-gray-100 rounded font-mono">h</kbd>
-				</div>
-				<div class="flex items-center justify-between">
-					<span class="text-gray-600">Show shortcuts</span>
-					<kbd class="px-2 py-1 text-sm bg-gray-100 rounded font-mono">?</kbd>
-				</div>
-				<div class="flex items-center justify-between">
-					<span class="text-gray-600">Close dialog</span>
-					<kbd class="px-2 py-1 text-sm bg-gray-100 rounded font-mono">Esc</kbd>
-				</div>
+				<button
+					type="button"
+					onclick={() => (showShortcuts = false)}
+					class="mt-6 w-full px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
+				>
+					Close
+				</button>
 			</div>
-			<button
-				onclick={() => (showShortcuts = false)}
-				class="mt-6 w-full px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
-			>
-				Close
-			</button>
 		</div>
 	</div>
 {/if}
