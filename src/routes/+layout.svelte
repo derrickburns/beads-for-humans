@@ -55,6 +55,12 @@
 						<kbd class="px-1.5 py-0.5 text-xs bg-gray-100 rounded">?</kbd> Shortcuts
 					</button>
 					<a
+						href="/import"
+						class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors hidden sm:block"
+					>
+						Bulk Import
+					</a>
+					<a
 						href="/issue/new"
 						class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
 					>
