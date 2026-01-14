@@ -7,11 +7,9 @@ const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 export const POST: RequestHandler = async ({ request }) => {
 	const apiKey = process.env.ANTHROPIC_API_KEY;
 
+	// Gracefully handle missing API key - just return no suggestions
 	if (!apiKey) {
-		return json(
-			{ error: 'ANTHROPIC_API_KEY not configured' },
-			{ status: 500 }
-		);
+		return json({ suggestions: [] });
 	}
 
 	const { issue, existingIssues } = await request.json() as {
@@ -86,12 +84,8 @@ Only suggest relationships with confidence >= 0.5. Return empty suggestions arra
 		});
 
 		if (!response.ok) {
-			const errorText = await response.text();
-			console.error('Anthropic API error:', errorText);
-			return json(
-				{ error: 'Failed to get AI suggestions' },
-				{ status: 500 }
-			);
+			console.error('Anthropic API error:', await response.text());
+			return json({ suggestions: [] });
 		}
 
 		const data = await response.json();
@@ -122,9 +116,6 @@ Only suggest relationships with confidence >= 0.5. Return empty suggestions arra
 		return json({ suggestions: validSuggestions });
 	} catch (error) {
 		console.error('Error calling Anthropic API:', error);
-		return json(
-			{ error: 'Failed to process AI suggestions' },
-			{ status: 500 }
-		);
+		return json({ suggestions: [] });
 	}
 };
