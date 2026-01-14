@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { issueStore } from '$lib/stores/issues';
+	import { issueStore } from '$lib/stores/issues.svelte';
 	import IssueCard from '$lib/components/IssueCard.svelte';
 	import type { IssueStatus } from '$lib/types/issue';
 

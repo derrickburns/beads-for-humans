@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Issue, IssuePriority, IssueType, IssueStatus, RelationshipSuggestion } from '$lib/types/issue';
 	import { PRIORITY_LABELS, TYPE_LABELS, STATUS_LABELS } from '$lib/types/issue';
-	import { issueStore } from '$lib/stores/issues';
+	import { issueStore } from '$lib/stores/issues.svelte';
 	import { suggestRelationships } from '$lib/ai/relationships';
 	import RelationshipSuggestionComponent from './RelationshipSuggestion.svelte';
 	import { goto } from '$app/navigation';

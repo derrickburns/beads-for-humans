@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Issue } from '$lib/types/issue';
 	import { PRIORITY_LABELS, TYPE_LABELS } from '$lib/types/issue';
-	import { issueStore } from '$lib/stores/issues';
+	import { issueStore } from '$lib/stores/issues.svelte';
 
 	let { issue }: { issue: Issue } = $props();
 

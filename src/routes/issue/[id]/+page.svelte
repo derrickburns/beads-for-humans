@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { issueStore } from '$lib/stores/issues';
+	import { issueStore } from '$lib/stores/issues.svelte';
 	import { PRIORITY_LABELS, TYPE_LABELS, STATUS_LABELS } from '$lib/types/issue';
 	import type { IssueStatus } from '$lib/types/issue';
 	import IssueForm from '$lib/components/IssueForm.svelte';

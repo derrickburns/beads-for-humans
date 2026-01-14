@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { RelationshipSuggestion, Issue } from '$lib/types/issue';
-	import { issueStore } from '$lib/stores/issues';
+	import { issueStore } from '$lib/stores/issues.svelte';
 
 	let {
 		suggestions,
