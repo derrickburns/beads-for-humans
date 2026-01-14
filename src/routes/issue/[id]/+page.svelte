@@ -397,9 +397,16 @@
 				<!-- Dependencies Section -->
 				<div>
 					<div class="flex items-center justify-between mb-2">
-						<h3 class="text-sm font-medium text-gray-500">
-							Dependencies ({issue.dependencies.length})
-						</h3>
+						<div class="flex items-center gap-2">
+							<h3 class="text-sm font-medium text-gray-500">
+								Dependencies ({issue.dependencies.length})
+							</h3>
+							{#if blockers.length > 0}
+								<span class="text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+									{blockers.length} blocking
+								</span>
+							{/if}
+						</div>
 						<div class="flex items-center gap-2">
 							{#if availableForDependency.length > 0}
 								<button
@@ -488,18 +495,22 @@
 							{#each issue.dependencies as depId}
 								{@const dep = issueStore.getById(depId)}
 								{#if dep}
-									<div class="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+									<div class="flex items-center gap-3 p-3 rounded-lg {dep.status === 'closed'
+										? 'bg-gray-50 border border-gray-200'
+										: 'bg-red-50 border border-red-200'}">
 										<div
 											class="w-2 h-2 rounded-full {dep.status === 'closed'
-												? 'bg-gray-400'
+												? 'bg-green-500'
 												: dep.status === 'in_progress'
 													? 'bg-blue-500'
-													: 'bg-green-500'}"
+													: 'bg-red-500'}"
 										></div>
 										<a href="/issue/{dep.id}" class="flex-1 font-medium text-gray-900 hover:text-blue-600 truncate">
 											{dep.title}
 										</a>
-										<span class="text-xs text-gray-500">{STATUS_LABELS[dep.status]}</span>
+										<span class="text-xs {dep.status === 'closed' ? 'text-green-600' : 'text-red-600'} font-medium">
+											{dep.status === 'closed' ? 'Done' : 'Blocking'}
+										</span>
 										<button
 											onclick={() => reverseDependency(dep.id)}
 											class="p-1 text-gray-400 hover:text-blue-600 transition-colors"
@@ -526,34 +537,6 @@
 						<p class="text-sm text-gray-400">No dependencies</p>
 					{/if}
 				</div>
-
-				<!-- Blockers (computed - these are unresolved dependencies) -->
-				{#if blockers.length > 0}
-					<div>
-						<h3 class="text-sm font-medium text-gray-500 mb-2">
-							Blocked by ({blockers.length})
-						</h3>
-						<p class="text-xs text-gray-400 mb-2">These dependencies must be completed first</p>
-						<div class="space-y-2">
-							{#each blockers as blocker}
-								<a
-									href="/issue/{blocker.id}"
-									class="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
-								>
-									<div
-										class="w-2 h-2 rounded-full {blocker.status === 'in_progress'
-											? 'bg-blue-500'
-											: 'bg-amber-500'}"
-									></div>
-									<span class="font-medium text-gray-900">{blocker.title}</span>
-									<span class="text-xs text-gray-500">
-										{STATUS_LABELS[blocker.status]}
-									</span>
-								</a>
-							{/each}
-						</div>
-					</div>
-				{/if}
 
 				<!-- Blocking (issues that depend on this one) -->
 				<div>
