@@ -19,6 +19,9 @@
 	let showCreateRelated = $state(false);
 	let newRelatedTitle = $state('');
 	let newRelatedType = $state<'dependency' | 'blocks'>('blocks');
+	let dependencyError = $state<string | null>(null);
+	let cycleBreakOptions = $state<Array<{from: string; to: string; fromTitle: string; toTitle: string}>>([]);
+	let pendingDependencyAction = $state<{type: 'add' | 'block' | 'reverse'; targetId: string} | null>(null);
 
 	// AI dependency suggestions state
 	let depSuggestions = $state<RelationshipSuggestion[]>([]);
@@ -74,7 +77,11 @@
 
 	function acceptDepSuggestion(suggestion: RelationshipSuggestion) {
 		if (issue) {
-			issueStore.addDependency(issue.id, suggestion.targetId);
+			const result = issueStore.addDependency(issue.id, suggestion.targetId);
+			if (result.error) {
+				dependencyError = result.error;
+				setTimeout(clearError, 3000);
+			}
 		}
 	}
 
@@ -82,18 +89,62 @@
 		dismissedDepSuggestions = new Set([...dismissedDepSuggestions, suggestion.targetId]);
 	}
 
+	function clearError() {
+		dependencyError = null;
+		cycleBreakOptions = [];
+		pendingDependencyAction = null;
+	}
+
+	function handleCycleBreak(breakEdge: {from: string; to: string}) {
+		if (!issue || !pendingDependencyAction) return;
+
+		if (pendingDependencyAction.type === 'add') {
+			issueStore.addDependencyBreakingCycle(issue.id, pendingDependencyAction.targetId, breakEdge);
+			showAddDependency = false;
+		} else if (pendingDependencyAction.type === 'block') {
+			issueStore.addDependencyBreakingCycle(pendingDependencyAction.targetId, issue.id, breakEdge);
+			showAddBlocking = false;
+		} else if (pendingDependencyAction.type === 'reverse') {
+			// For reverse, first remove original, then add with cycle break
+			// The original was already removed by reverseDependency, so just add
+			issueStore.addDependencyBreakingCycle(pendingDependencyAction.targetId, issue.id, breakEdge);
+		}
+
+		clearError();
+	}
+
 	function addManualDependency(depId: string) {
 		if (issue) {
-			issueStore.addDependency(issue.id, depId);
-			showAddDependency = false;
+			const result = issueStore.addDependency(issue.id, depId);
+			if (result.error) {
+				dependencyError = result.error;
+				if (result.cycleBreakOptions && result.cycleBreakOptions.length > 0) {
+					cycleBreakOptions = result.cycleBreakOptions;
+					pendingDependencyAction = { type: 'add', targetId: depId };
+				} else {
+					setTimeout(clearError, 3000);
+				}
+			} else {
+				showAddDependency = false;
+			}
 		}
 	}
 
 	function addAsBlockerTo(targetId: string) {
 		if (issue) {
 			// Add this issue as a dependency of the target (target depends on this)
-			issueStore.addDependency(targetId, issue.id);
-			showAddBlocking = false;
+			const result = issueStore.addDependency(targetId, issue.id);
+			if (result.error) {
+				dependencyError = result.error;
+				if (result.cycleBreakOptions && result.cycleBreakOptions.length > 0) {
+					cycleBreakOptions = result.cycleBreakOptions;
+					pendingDependencyAction = { type: 'block', targetId };
+				} else {
+					setTimeout(clearError, 3000);
+				}
+			} else {
+				showAddBlocking = false;
+			}
 		}
 	}
 
@@ -106,6 +157,28 @@
 	function removeBlocking(targetId: string) {
 		// Remove this issue from target's dependencies
 		issueStore.removeDependency(targetId, issue?.id ?? '');
+	}
+
+	function reverseDependency(depId: string) {
+		if (issue) {
+			const result = issueStore.reverseDependency(issue.id, depId);
+			if (result.error) {
+				dependencyError = result.error;
+				setTimeout(clearError, 3000);
+			}
+		}
+	}
+
+	function reverseBlocking(targetId: string) {
+		// Currently: target depends on this
+		// After: this depends on target
+		if (issue) {
+			const result = issueStore.reverseDependency(targetId, issue.id);
+			if (result.error) {
+				dependencyError = result.error;
+				setTimeout(clearError, 3000);
+			}
+		}
 	}
 
 	function createRelatedIssue() {
@@ -133,8 +206,13 @@
 				dependencies: []
 			});
 			if (newIssue) {
-				issueStore.addDependency(issue.id, newIssue.id);
-				goto(`/issue/${newIssue.id}`);
+				const result = issueStore.addDependency(issue.id, newIssue.id);
+				if (result.error) {
+					dependencyError = result.error;
+					setTimeout(clearError, 3000);
+				} else {
+					goto(`/issue/${newIssue.id}`);
+				}
 			}
 		}
 
@@ -255,6 +333,41 @@
 
 			<!-- Content -->
 			<div class="p-6 space-y-6">
+				<!-- Error Banner with Cycle Break Options -->
+				{#if dependencyError}
+					<div class="p-4 bg-red-50 border border-red-200 rounded-lg">
+						<div class="flex items-start gap-2 text-red-800">
+							<svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+							</svg>
+							<div class="flex-1">
+								<span class="text-sm font-medium">{dependencyError}</span>
+								{#if cycleBreakOptions.length > 0}
+									<p class="text-xs text-red-600 mt-1">To proceed, remove one of these dependencies:</p>
+									<div class="mt-2 space-y-1">
+										{#each cycleBreakOptions as option}
+											<button
+												onclick={() => handleCycleBreak(option)}
+												class="w-full text-left px-3 py-2 text-sm bg-white border border-red-200 rounded hover:bg-red-100 transition-colors"
+											>
+												<span class="text-gray-600">Remove:</span>
+												<span class="font-medium text-gray-900"> "{option.fromTitle}"</span>
+												<span class="text-gray-500"> depends on </span>
+												<span class="font-medium text-gray-900">"{option.toTitle}"</span>
+											</button>
+										{/each}
+									</div>
+								{/if}
+							</div>
+							<button onclick={clearError} class="p-1 hover:bg-red-100 rounded flex-shrink-0">
+								<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+								</svg>
+							</button>
+						</div>
+					</div>
+				{/if}
+
 				<!-- Description -->
 				{#if issue.description}
 					<div>
@@ -388,6 +501,15 @@
 										</a>
 										<span class="text-xs text-gray-500">{STATUS_LABELS[dep.status]}</span>
 										<button
+											onclick={() => reverseDependency(dep.id)}
+											class="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+											title="Reverse direction (make this block that)"
+										>
+											<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+											</svg>
+										</button>
+										<button
 											onclick={() => removeDependency(dep.id)}
 											class="p-1 text-gray-400 hover:text-red-600 transition-colors"
 											title="Remove dependency"
@@ -479,6 +601,15 @@
 										{blocked.title}
 									</a>
 									<span class="text-xs text-gray-500">Waiting on this</span>
+									<button
+										onclick={() => reverseBlocking(blocked.id)}
+										class="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+										title="Reverse direction (make this depend on that)"
+									>
+										<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+										</svg>
+									</button>
 									<button
 										onclick={() => removeBlocking(blocked.id)}
 										class="p-1 text-gray-400 hover:text-red-600 transition-colors"
