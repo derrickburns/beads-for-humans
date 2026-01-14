@@ -75,7 +75,7 @@
 	<div
 		class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
 		onclick={() => (showShortcuts = false)}
-		onkeydown={(e) => e.key === 'Escape' && (showShortcuts = false)}
+		onkeydown={(e) => { if (e.key === 'Escape') showShortcuts = false; }}
 		role="dialog"
 		aria-modal="true"
 		tabindex="-1"
@@ -83,7 +83,6 @@
 		<div
 			class="bg-white rounded-xl p-6 max-w-sm mx-4 shadow-xl"
 			onclick={(e) => e.stopPropagation()}
-			onkeydown={() => {}}
 			role="document"
 		>
 			<h3 class="text-lg font-semibold text-gray-900 mb-4">Keyboard Shortcuts</h3>
