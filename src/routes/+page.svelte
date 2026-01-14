@@ -22,7 +22,8 @@
 		}
 
 		// Sort by priority (lower = higher priority), then by created date
-		return issues.sort((a, b) => {
+		// Use spread to create a copy to avoid mutating reactive state
+		return [...issues].sort((a, b) => {
 			if (a.status === 'closed' && b.status !== 'closed') return 1;
 			if (a.status !== 'closed' && b.status === 'closed') return -1;
 			if (a.priority !== b.priority) return a.priority - b.priority;
