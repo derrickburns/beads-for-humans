@@ -42,11 +42,16 @@
 		}
 	});
 
-	// Clear suggestions when focus changes
+	// Auto-load suggestions when focus changes
 	$effect(() => {
 		if (focusedIssueId) {
 			suggestions = [];
 			dismissedSuggestions = new Set();
+			// Auto-trigger AI suggestions after a short delay
+			const timer = setTimeout(() => {
+				loadAISuggestions();
+			}, 300);
+			return () => clearTimeout(timer);
 		}
 	});
 
@@ -371,29 +376,55 @@
 
 		{#if focusedIssueId}
 			{@const focused = issueStore.getById(focusedIssueId)}
-			<div class="flex items-center gap-2 px-3 py-1.5 bg-blue-100 text-blue-800 rounded-lg text-sm">
-				<span class="font-medium">{focused?.title.slice(0, 25)}{(focused?.title.length ?? 0) > 25 ? '…' : ''}</span>
-				<button onclick={() => (focusedIssueId = null)} class="font-bold hover:text-blue-600 ml-1">
-					×
-				</button>
-			</div>
+			{#if focused}
+				<div class="flex items-center gap-2 px-3 py-1.5 bg-blue-100 text-blue-800 rounded-lg text-sm">
+					<span class="font-medium">{focused.title.slice(0, 25)}{focused.title.length > 25 ? '…' : ''}</span>
+					<button onclick={() => (focusedIssueId = null)} class="font-bold hover:text-blue-600 ml-1">
+						×
+					</button>
+				</div>
 
-			<!-- AI Suggest Button -->
-			<button
-				onclick={loadAISuggestions}
-				disabled={loadingSuggestions}
-				class="flex items-center gap-2 px-4 py-1.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
-			>
-				{#if loadingSuggestions}
-					<span class="w-4 h-4 border-2 border-purple-300 border-t-white rounded-full animate-spin"></span>
-					Analyzing...
-				{:else}
+				<!-- Quick Status Change -->
+				<div class="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
+					<button
+						onclick={() => { issueStore.updateStatus(focused.id, 'open'); }}
+						class="px-2 py-1 text-xs font-medium rounded transition-colors {focused.status === 'open' ? 'bg-green-500 text-white' : 'text-gray-600 hover:bg-gray-200'}"
+					>
+						Open
+					</button>
+					<button
+						onclick={() => { issueStore.updateStatus(focused.id, 'in_progress'); }}
+						class="px-2 py-1 text-xs font-medium rounded transition-colors {focused.status === 'in_progress' ? 'bg-blue-500 text-white' : 'text-gray-600 hover:bg-gray-200'}"
+					>
+						In Progress
+					</button>
+					<button
+						onclick={() => { issueStore.updateStatus(focused.id, 'closed'); }}
+						class="px-2 py-1 text-xs font-medium rounded transition-colors {focused.status === 'closed' ? 'bg-gray-500 text-white' : 'text-gray-600 hover:bg-gray-200'}"
+					>
+						Done
+					</button>
+				</div>
+
+				<!-- Edit Link -->
+				<a
+					href="/issue/{focused.id}"
+					class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+				>
 					<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
 					</svg>
-					AI Suggest Dependencies
+					Edit
+				</a>
+
+				<!-- AI Suggest Button -->
+				{#if loadingSuggestions}
+					<div class="flex items-center gap-2 px-3 py-1.5 text-purple-600 text-sm">
+						<span class="w-4 h-4 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin"></span>
+						Analyzing...
+					</div>
 				{/if}
-			</button>
+			{/if}
 		{/if}
 
 		<div class="flex items-center gap-2 text-sm text-gray-500 ml-auto">
@@ -680,8 +711,8 @@
 	<!-- Help text -->
 	<div class="text-center text-sm text-gray-400 pt-2">
 		Click to select · Double-click to edit · Scroll to zoom · Drag to pan
-		{#if focusedIssueId}
-			· <span class="text-purple-600">Click "AI Suggest" to find dependencies</span>
+		{#if !focusedIssueId}
+			· <span class="text-purple-600">Select an issue to see AI suggestions</span>
 		{/if}
 	</div>
 </div>
