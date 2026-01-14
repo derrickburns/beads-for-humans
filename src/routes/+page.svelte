@@ -41,8 +41,9 @@
 </script>
 
 <div class="space-y-6">
-	<!-- Filters -->
-	<div class="flex flex-wrap items-center gap-4">
+	<!-- View Toggle & Filters -->
+	<div class="flex flex-wrap items-center justify-between gap-4">
+		<div class="flex flex-wrap items-center gap-4">
 		<div class="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
 			<button
 				onclick={() => (filter = 'all')}
@@ -106,6 +107,17 @@
 				Closed ({counts.closed})
 			</button>
 		</div>
+		</div>
+
+		<a
+			href="/graph"
+			class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
+		>
+			<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+			</svg>
+			Graph View
+		</a>
 	</div>
 
 	<!-- Issue List -->
