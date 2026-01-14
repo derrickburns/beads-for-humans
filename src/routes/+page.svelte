@@ -5,10 +5,23 @@
 	import IssueCard from '$lib/components/IssueCard.svelte';
 	import GraphHealth from '$lib/components/GraphHealth.svelte';
 	import DependencyGraph from '$lib/components/DependencyGraph.svelte';
+	import GraphChatSidebar from '$lib/components/GraphChatSidebar.svelte';
+	import { graphChatStore } from '$lib/stores/graphChat.svelte';
 	import type { IssueStatus } from '$lib/types/issue';
 
 	// Get focus parameter from URL (for "View in Graph" navigation)
 	let initialFocusId = $derived($page.url.searchParams.get('focus'));
+
+	// Chat sidebar state
+	let chatOpen = $state(false);
+	let focusedIssueId = $state<string | null>(initialFocusId);
+
+	// Update focused issue when initialFocusId changes
+	$effect(() => {
+		if (initialFocusId) {
+			focusedIssueId = initialFocusId;
+		}
+	});
 
 	// View mode - default to graph, persist preference
 	// Force graph view if coming from "View in Graph" link
@@ -108,8 +121,37 @@
 	<GraphHealth />
 
 	{#if viewMode === 'graph'}
-		<!-- Graph View (Primary) -->
-		<DependencyGraph focusId={initialFocusId} />
+		<!-- Graph View (Primary) with Chat Sidebar -->
+		<div class="flex h-[calc(100vh-16rem)] gap-0">
+			<!-- Graph Area -->
+			<div class="flex-1 min-w-0">
+				<DependencyGraph focusId={initialFocusId} bind:focusedIssueId={focusedIssueId} />
+			</div>
+
+			<!-- Chat Sidebar -->
+			<GraphChatSidebar
+				{focusedIssueId}
+				isOpen={chatOpen}
+				onClose={() => (chatOpen = false)}
+			/>
+		</div>
+
+		<!-- Chat Toggle Button (Fixed position) -->
+		<button
+			onclick={() => (chatOpen = !chatOpen)}
+			class="fixed bottom-6 right-6 p-4 bg-purple-600 text-white rounded-full shadow-lg hover:bg-purple-700 transition-all hover:scale-105 z-50 {chatOpen ? 'rotate-180' : ''}"
+			aria-label={chatOpen ? 'Close chat' : 'Open chat assistant'}
+		>
+			{#if chatOpen}
+				<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+				</svg>
+			{:else}
+				<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+				</svg>
+			{/if}
+		</button>
 	{:else}
 		<!-- List View (Secondary) -->
 		<div class="space-y-4">

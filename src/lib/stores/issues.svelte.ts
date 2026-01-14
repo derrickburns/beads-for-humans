@@ -1,5 +1,12 @@
 import { browser } from '$app/environment';
-import type { Issue, IssueStatus, IssuePriority, IssueType } from '$lib/types/issue';
+import type {
+	Issue,
+	IssueStatus,
+	IssuePriority,
+	IssueType,
+	AIAssignment,
+	NeedsHumanTrigger
+} from '$lib/types/issue';
 
 const STORAGE_KEY = 'issues';
 
@@ -504,6 +511,161 @@ class IssueStore {
 			}
 		}
 		return removed;
+	}
+
+	// ===== AI Assignment Methods =====
+
+	// Assign an AI model to work on an issue
+	assignAI(issueId: string, modelId: string, modelName: string): Issue | undefined {
+		const now = new Date().toISOString();
+		return this.update(issueId, {
+			aiAssignment: {
+				modelId,
+				modelName,
+				assignedAt: now,
+				lastActivityAt: now
+			},
+			// Auto-clear needs-human when AI is assigned
+			needsHuman: undefined
+		});
+	}
+
+	// Remove AI assignment from an issue
+	unassignAI(issueId: string): Issue | undefined {
+		return this.update(issueId, { aiAssignment: undefined });
+	}
+
+	// Update AI's last activity timestamp (for timeout tracking)
+	updateAIActivity(issueId: string): Issue | undefined {
+		const issue = this.getById(issueId);
+		if (!issue?.aiAssignment) return undefined;
+		return this.update(issueId, {
+			aiAssignment: {
+				...issue.aiAssignment,
+				lastActivityAt: new Date().toISOString()
+			}
+		});
+	}
+
+	// ===== Human Attention Methods =====
+
+	// Flag an issue as needing human attention
+	flagNeedsHuman(
+		issueId: string,
+		trigger: NeedsHumanTrigger,
+		reason: string,
+		aiModelId?: string
+	): Issue | undefined {
+		return this.update(issueId, {
+			needsHuman: {
+				trigger,
+				reason,
+				flaggedAt: new Date().toISOString(),
+				aiModelId
+			}
+		});
+	}
+
+	// Clear the needs-human flag
+	clearNeedsHuman(issueId: string): Issue | undefined {
+		return this.update(issueId, { needsHuman: undefined });
+	}
+
+	// Computed: issues needing human attention
+	get needsHuman(): Issue[] {
+		return this.issues.filter((i) => i.needsHuman && i.status !== 'closed');
+	}
+
+	// Computed: AI-assigned issues
+	get aiAssigned(): Issue[] {
+		return this.issues.filter((i) => i.aiAssignment && i.status !== 'closed');
+	}
+
+	// Get issues assigned to a specific AI model
+	getByAIModel(modelId: string): Issue[] {
+		return this.issues.filter(
+			(i) => i.aiAssignment?.modelId === modelId && i.status !== 'closed'
+		);
+	}
+
+	// ===== Blocker Importance Analysis =====
+
+	// Get all issues that transitively depend on this issue
+	getTransitiveDependents(issueId: string): Issue[] {
+		const dependents = new Set<string>();
+		const queue = [issueId];
+
+		while (queue.length > 0) {
+			const current = queue.shift()!;
+			// Find all issues that directly depend on current
+			for (const issue of this.issues) {
+				if (issue.dependencies.includes(current) && !dependents.has(issue.id)) {
+					dependents.add(issue.id);
+					queue.push(issue.id);
+				}
+			}
+		}
+
+		return Array.from(dependents)
+			.map((id) => this.getById(id))
+			.filter((i): i is Issue => i !== undefined);
+	}
+
+	// Calculate importance of a blocker based on downstream impact
+	getBlockerImportance(blockerId: string): number {
+		const dependents = this.getTransitiveDependents(blockerId);
+		if (dependents.length === 0) return 0;
+
+		// Weight by priority of downstream issues (P0 = 4x, P4 = 1x)
+		const priorityWeights = [4, 3, 2, 1.5, 1];
+		const weightedCount = dependents.reduce((sum, issue) => {
+			return sum + priorityWeights[issue.priority];
+		}, 0);
+
+		// Normalize to 0-1 range (cap at 10 weighted units)
+		return Math.min(1, weightedCount / 10);
+	}
+
+	// Get the most important blocker for a blocked issue
+	getMostImportantBlocker(
+		issueId: string
+	): { blocker: Issue; importance: number } | null {
+		const blockers = this.getBlockers(issueId);
+		if (blockers.length === 0) return null;
+
+		let best: { blocker: Issue; importance: number } | null = null;
+
+		for (const blocker of blockers) {
+			const importance = this.getBlockerImportance(blocker.id);
+			// Also factor in the blocker's own priority
+			const priorityBoost = (4 - blocker.priority) * 0.1; // P0 adds 0.4, P4 adds 0
+			const totalScore = importance + priorityBoost;
+
+			if (!best || totalScore > best.importance) {
+				best = { blocker, importance: totalScore };
+			}
+		}
+
+		return best;
+	}
+
+	// Check for AI timeouts and return issues that should be flagged
+	checkAITimeouts(timeoutMinutes: number = 15): Issue[] {
+		const now = Date.now();
+		const timedOut: Issue[] = [];
+
+		for (const issue of this.issues) {
+			if (issue.aiAssignment && !issue.needsHuman && issue.status !== 'closed') {
+				const lastActivity = new Date(issue.aiAssignment.lastActivityAt).getTime();
+				const minutesInactive = (now - lastActivity) / (1000 * 60);
+
+				if (minutesInactive > timeoutMinutes) {
+					timedOut.push(issue);
+				}
+			}
+		}
+
+		return timedOut;
 	}
 }
 

@@ -1,6 +1,23 @@
 export type IssueStatus = 'open' | 'in_progress' | 'closed';
 export type IssuePriority = 0 | 1 | 2 | 3 | 4;
 export type IssueType = 'task' | 'bug' | 'feature';
+export type NeedsHumanTrigger = 'ai_blocked' | 'timeout' | 'user_flagged';
+
+// AI assignment tracking
+export interface AIAssignment {
+	modelId: string;        // e.g., "anthropic/claude-sonnet-4"
+	modelName: string;      // e.g., "Claude Sonnet 4"
+	assignedAt: string;     // ISO timestamp
+	lastActivityAt: string; // Updated on AI progress
+}
+
+// Human attention tracking
+export interface NeedsHumanReason {
+	trigger: NeedsHumanTrigger;
+	reason: string;
+	flaggedAt: string;
+	aiModelId?: string;     // Which AI flagged it (for ai_blocked)
+}
 
 export interface Issue {
 	id: string;
@@ -12,6 +29,8 @@ export interface Issue {
 	createdAt: string;
 	updatedAt: string;
 	dependencies: string[]; // IDs of issues this depends on
+	aiAssignment?: AIAssignment;
+	needsHuman?: NeedsHumanReason;
 }
 
 export interface RelationshipSuggestion {

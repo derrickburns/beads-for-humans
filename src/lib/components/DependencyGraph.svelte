@@ -2,12 +2,14 @@
 	import { issueStore } from '$lib/stores/issues.svelte';
 	import { goto } from '$app/navigation';
 	import type { Issue, RelationshipSuggestion, GraphImprovement } from '$lib/types/issue';
+	import { getModelAbbrev, getModelColor } from '$lib/types/graphChat';
 
 	// Props
 	interface Props {
 		focusId?: string | null;
+		focusedIssueId?: string | null;
 	}
-	let { focusId = null }: Props = $props();
+	let { focusId = null, focusedIssueId = $bindable<string | null>(null) }: Props = $props();
 
 	// Layout constants
 	const NODE_WIDTH = 200;
@@ -18,7 +20,7 @@
 
 	// Filter state
 	let showClosed = $state(false);
-	let focusedIssueId = $state<string | null>(focusId);
+	// focusedIssueId is now a bindable prop
 
 	// AI Suggestions state
 	let suggestions = $state<RelationshipSuggestion[]>([]);
@@ -467,6 +469,60 @@
 					</button>
 				</div>
 
+				<!-- AI Assignment Quick Actions -->
+				<div class="flex items-center gap-1 p-1 bg-amber-50 rounded-lg border border-amber-200">
+					{#if focused.aiAssignment}
+						<span class="px-2 py-1 text-xs text-amber-700">
+							{focused.aiAssignment.modelName}
+						</span>
+						<button
+							onclick={() => { issueStore.unassignAI(focused.id); }}
+							class="px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-100 rounded transition-colors"
+						>
+							Unassign AI
+						</button>
+					{:else}
+						<button
+							onclick={() => { issueStore.assignAI(focused.id, 'anthropic/claude-sonnet-4', 'Claude Sonnet 4'); }}
+							class="px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100 rounded transition-colors"
+							title="Assign Claude"
+						>
+							🤖 Claude
+						</button>
+						<button
+							onclick={() => { issueStore.assignAI(focused.id, 'openai/gpt-4o', 'GPT-4o'); }}
+							class="px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-100 rounded transition-colors"
+							title="Assign GPT-4o"
+						>
+							🤖 GPT
+						</button>
+					{/if}
+				</div>
+
+				<!-- Flag for Human Attention -->
+				{#if focused.needsHuman}
+					<button
+						onclick={() => { issueStore.clearNeedsHuman(focused.id); }}
+						class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200 transition-colors"
+					>
+						<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+						</svg>
+						Resolve
+					</button>
+				{:else}
+					<button
+						onclick={() => { issueStore.flagNeedsHuman(focused.id, 'user_flagged', 'Manually flagged for attention'); }}
+						class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-red-100 hover:text-red-700 transition-colors"
+						title="Flag for human attention"
+					>
+						<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+						</svg>
+						Flag
+					</button>
+				{/if}
+
 				<!-- Edit Link -->
 				<a
 					href="/issue/{focused.id}"
@@ -664,7 +720,7 @@
 					</marker>
 				</defs>
 
-				<!-- Existing Edges -->
+				<!-- Existing Edges with importance-based styling -->
 				{#each positions as pos}
 					{#each pos.issue.dependencies as depId}
 						{@const depPos = getPosition(depId)}
@@ -675,11 +731,15 @@
 							{@const endY = pos.y + NODE_HEIGHT / 2}
 							{@const midX = (startX + endX) / 2}
 							{@const isHighlighted = focusedIssueId === pos.issue.id || focusedIssueId === depId}
+							{@const importance = issueStore.getBlockerImportance(depId)}
+							{@const importanceWidth = 2 + importance * 2}
+							{@const importanceOpacity = 0.5 + importance * 0.5}
 							<path
 								d="M {startX} {startY} C {midX} {startY}, {midX} {endY}, {endX} {endY}"
 								fill="none"
 								stroke={isHighlighted ? '#3b82f6' : '#d1d5db'}
-								stroke-width={isHighlighted ? 3 : 2}
+								stroke-width={isHighlighted ? 3 : importanceWidth}
+								opacity={isHighlighted ? 1 : importanceOpacity}
 								marker-end={isHighlighted ? 'url(#arrowhead-blue)' : 'url(#arrowhead)'}
 								class="transition-all duration-200"
 							/>
@@ -716,6 +776,9 @@
 					{@const statusBg = getStatusBg(pos.issue.status, isBlocked)}
 					{@const isFocused = focusedIssueId === pos.issue.id}
 					{@const isSuggested = activeSuggestions.some((s) => s.targetId === pos.issue.id)}
+					{@const hasAI = !!pos.issue.aiAssignment}
+					{@const needsHuman = !!pos.issue.needsHuman}
+					{@const aiColor = hasAI ? getModelColor(pos.issue.aiAssignment!.modelId) : null}
 					<g
 						transform="translate({pos.x}, {pos.y})"
 						onclick={(e) => handleNodeClick(e, pos.issue.id)}
@@ -728,8 +791,24 @@
 							else if (e.key === ' ') focusOnIssue(pos.issue.id);
 						}}
 					>
+						<!-- Needs Human attention glow (red/coral) -->
+						{#if needsHuman}
+							<rect
+								x="-6"
+								y="-6"
+								width={NODE_WIDTH + 12}
+								height={NODE_HEIGHT + 12}
+								rx="14"
+								fill="none"
+								stroke="#ef4444"
+								stroke-width="3"
+								opacity="0.6"
+								class="animate-pulse"
+							/>
+						{/if}
+
 						<!-- Node background with glow for focused/suggested -->
-						{#if isFocused}
+						{#if isFocused && !needsHuman}
 							<rect
 								x="-4"
 								y="-4"
@@ -764,9 +843,9 @@
 							width={NODE_WIDTH}
 							height={NODE_HEIGHT}
 							rx="10"
-							fill={isSuggested ? '#faf5ff' : statusBg}
-							stroke={isFocused ? '#3b82f6' : isSuggested ? '#9333ea' : statusColor}
-							stroke-width={isFocused || isSuggested ? 3 : 2}
+							fill={isSuggested ? '#faf5ff' : needsHuman ? '#fef2f2' : statusBg}
+							stroke={needsHuman ? '#ef4444' : isFocused ? '#3b82f6' : isSuggested ? '#9333ea' : statusColor}
+							stroke-width={needsHuman || isFocused || isSuggested ? 3 : 2}
 							class="transition-all duration-200"
 						/>
 
@@ -783,8 +862,26 @@
 							P{pos.issue.priority} · {pos.issue.status.replace('_', ' ')}
 						</text>
 
-						<!-- Suggested badge -->
-						{#if isSuggested}
+						<!-- AI Assignment badge (top-right) -->
+						{#if hasAI && aiColor}
+							<g transform="translate({NODE_WIDTH - 28}, -8)">
+								<rect x="0" y="0" width="28" height="20" rx="10" fill={aiColor.bg} />
+								<text x="14" y="14" font-size="9" fill={aiColor.text} text-anchor="middle" font-weight="bold">
+									{getModelAbbrev(pos.issue.aiAssignment!.modelId)}
+								</text>
+							</g>
+						{/if}
+
+						<!-- Needs Human badge (top-left, pulsing exclamation) -->
+						{#if needsHuman}
+							<g transform="translate(-8, -8)">
+								<circle cx="12" cy="12" r="12" fill="#ef4444" class="animate-pulse" />
+								<text x="12" y="17" font-size="14" fill="white" text-anchor="middle" font-weight="bold">!</text>
+							</g>
+						{/if}
+
+						<!-- Suggested badge (only if no AI assignment) -->
+						{#if isSuggested && !hasAI}
 							<g transform="translate({NODE_WIDTH - 24}, -8)">
 								<circle cx="12" cy="12" r="12" fill="#9333ea" />
 								<text x="12" y="16" font-size="10" fill="white" text-anchor="middle" font-weight="bold">AI</text>
@@ -798,7 +895,7 @@
 
 	<!-- Legend & Actions -->
 	<div class="flex flex-wrap items-center justify-between gap-4">
-		<div class="flex flex-wrap items-center gap-6 text-sm">
+		<div class="flex flex-wrap items-center gap-4 text-sm">
 			<div class="flex items-center gap-2">
 				<div class="w-3 h-3 rounded-full bg-green-500"></div>
 				<span class="text-gray-600">Ready</span>
@@ -814,6 +911,17 @@
 			<div class="flex items-center gap-2">
 				<div class="w-3 h-3 rounded-full bg-gray-400"></div>
 				<span class="text-gray-600">Closed</span>
+			</div>
+			<div class="h-4 border-l border-gray-300"></div>
+			<div class="flex items-center gap-2">
+				<div class="w-5 h-3.5 rounded bg-amber-600 flex items-center justify-center">
+					<span class="text-[8px] text-white font-bold">CL</span>
+				</div>
+				<span class="text-gray-600">AI Working</span>
+			</div>
+			<div class="flex items-center gap-2">
+				<div class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
+				<span class="text-gray-600">Needs Human</span>
 			</div>
 			{#if activeSuggestions.length > 0}
 				<div class="flex items-center gap-2">

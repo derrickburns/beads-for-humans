@@ -1,7 +1,105 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import type { Issue, RelationshipSuggestion, GraphImprovement } from '$lib/types/issue';
+import type { Issue, RelationshipSuggestion, GraphImprovement, GraphChange } from '$lib/types/issue';
 import { chatCompletion } from '$lib/ai/provider';
+
+// Helper to check if adding a single dependency would create a cycle
+function wouldDependencyCreateCycle(
+	fromId: string,
+	toId: string,
+	existingIssues: Issue[]
+): boolean {
+	if (fromId === toId) return true;
+
+	// Build the graph
+	const graph = new Map<string, Set<string>>();
+	for (const issue of existingIssues) {
+		graph.set(issue.id, new Set(issue.dependencies));
+	}
+
+	// Add the proposed edge
+	const fromDeps = graph.get(fromId);
+	if (fromDeps) {
+		fromDeps.add(toId);
+	}
+
+	// BFS to check if toId can reach fromId through the graph (cycle detection)
+	const visited = new Set<string>();
+	const queue = [toId];
+
+	while (queue.length > 0) {
+		const current = queue.shift()!;
+		if (current === fromId) return true;
+		if (visited.has(current)) continue;
+		visited.add(current);
+
+		const deps = graph.get(current) || new Set();
+		for (const depId of deps) {
+			if (!visited.has(depId)) {
+				queue.push(depId);
+			}
+		}
+	}
+	return false;
+}
+
+// Helper to check if an improvement would create a cycle
+function wouldImprovementCreateCycle(
+	improvement: GraphImprovement,
+	existingIssues: Issue[]
+): boolean {
+	// Build the graph as it would be after applying all changes
+	const graph = new Map<string, Set<string>>();
+
+	// Initialize with existing dependencies
+	for (const issue of existingIssues) {
+		graph.set(issue.id, new Set(issue.dependencies));
+	}
+
+	// Apply all changes in the improvement
+	for (const change of improvement.changes) {
+		if (change.action === 'add') {
+			const deps = graph.get(change.fromId);
+			if (deps) {
+				deps.add(change.toId);
+			}
+		} else if (change.action === 'remove') {
+			const deps = graph.get(change.fromId);
+			if (deps) {
+				deps.delete(change.toId);
+			}
+		}
+	}
+
+	// Check for cycles using DFS
+	const visited = new Set<string>();
+	const recursionStack = new Set<string>();
+
+	function hasCycle(nodeId: string): boolean {
+		visited.add(nodeId);
+		recursionStack.add(nodeId);
+
+		const deps = graph.get(nodeId) || new Set();
+		for (const depId of deps) {
+			if (!visited.has(depId)) {
+				if (hasCycle(depId)) return true;
+			} else if (recursionStack.has(depId)) {
+				return true;
+			}
+		}
+
+		recursionStack.delete(nodeId);
+		return false;
+	}
+
+	for (const issue of existingIssues) {
+		if (!visited.has(issue.id)) {
+			if (hasCycle(issue.id)) return true;
+		}
+	}
+
+	return false;
+}
 
 export const POST: RequestHandler = async ({ request }) => {
 	const { issue, existingIssues, currentIssueId, model } = await request.json() as {
@@ -108,11 +206,22 @@ IMPORTANT RULES:
 
 		// Validate suggestions
 		const suggestions: RelationshipSuggestion[] = (parsed.suggestions || []).filter(
-			(s: RelationshipSuggestion) =>
-				existingIssues.some((i) => i.id === s.targetId) &&
-				['dependency', 'blocks', 'related'].includes(s.type) &&
-				typeof s.confidence === 'number' &&
-				s.confidence >= 0.7
+			(s: RelationshipSuggestion) => {
+				// Basic validation
+				if (!existingIssues.some((i) => i.id === s.targetId)) return false;
+				if (!['dependency', 'blocks', 'related'].includes(s.type)) return false;
+				if (typeof s.confidence !== 'number' || s.confidence < 0.7) return false;
+
+				// For dependency suggestions, check if it would create a cycle
+				if (s.type === 'dependency' && currentIssueId) {
+					if (wouldDependencyCreateCycle(currentIssueId, s.targetId, existingIssues)) {
+						console.log('Filtered out suggestion that would create cycle:', s.targetId);
+						return false;
+					}
+				}
+
+				return true;
+			}
 		);
 
 		// Validate improvements
@@ -122,11 +231,20 @@ IMPORTANT RULES:
 				if (!Array.isArray(imp.changes) || imp.changes.length === 0) return false;
 
 				// Validate all changes reference valid issues
-				return imp.changes.every(change =>
+				const allChangesValid = imp.changes.every(change =>
 					existingIssues.some(i => i.id === change.fromId) &&
 					existingIssues.some(i => i.id === change.toId) &&
 					['add', 'remove'].includes(change.action)
 				);
+				if (!allChangesValid) return false;
+
+				// Check if improvement would create a cycle
+				if (wouldImprovementCreateCycle(imp, existingIssues)) {
+					console.log('Filtered out improvement that would create cycle:', imp.description);
+					return false;
+				}
+
+				return true;
 			}
 		);
 
