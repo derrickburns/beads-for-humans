@@ -1,19 +1,33 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
+	import { page } from '$app/stores';
 	import { issueStore } from '$lib/stores/issues.svelte';
 	import IssueCard from '$lib/components/IssueCard.svelte';
 	import GraphHealth from '$lib/components/GraphHealth.svelte';
 	import DependencyGraph from '$lib/components/DependencyGraph.svelte';
 	import type { IssueStatus } from '$lib/types/issue';
 
+	// Get focus parameter from URL (for "View in Graph" navigation)
+	let initialFocusId = $derived($page.url.searchParams.get('focus'));
+
 	// View mode - default to graph, persist preference
+	// Force graph view if coming from "View in Graph" link
 	let viewMode = $state<'graph' | 'list'>('graph');
 
-	// Load saved preference
+	// Load saved preference (but override if focus param present)
 	if (browser) {
 		const saved = localStorage.getItem('view-mode');
-		if (saved === 'list') viewMode = 'list';
+		if (saved === 'list' && !initialFocusId) viewMode = 'list';
 	}
+
+	// Clean up URL after initial focus (remove ?focus param to avoid persistence on refresh)
+	$effect(() => {
+		if (browser && initialFocusId) {
+			const url = new URL(window.location.href);
+			url.searchParams.delete('focus');
+			window.history.replaceState({}, '', url.toString());
+		}
+	});
 
 	function setViewMode(mode: 'graph' | 'list') {
 		viewMode = mode;
@@ -95,7 +109,7 @@
 
 	{#if viewMode === 'graph'}
 		<!-- Graph View (Primary) -->
-		<DependencyGraph />
+		<DependencyGraph focusId={initialFocusId} />
 	{:else}
 		<!-- List View (Secondary) -->
 		<div class="space-y-4">

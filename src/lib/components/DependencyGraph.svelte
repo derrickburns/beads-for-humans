@@ -3,6 +3,12 @@
 	import { goto } from '$app/navigation';
 	import type { Issue } from '$lib/types/issue';
 
+	// Props
+	interface Props {
+		focusId?: string | null;
+	}
+	let { focusId = null }: Props = $props();
+
 	// Layout constants
 	const NODE_WIDTH = 180;
 	const NODE_HEIGHT = 50;
@@ -12,7 +18,14 @@
 
 	// Filter state
 	let showClosed = $state(false);
-	let focusedIssueId = $state<string | null>(null);
+	let focusedIssueId = $state<string | null>(focusId);
+
+	// Sync focusedIssueId when focusId prop changes (e.g., from URL)
+	$effect(() => {
+		if (focusId) {
+			focusedIssueId = focusId;
+		}
+	});
 
 	// Zoom/pan state
 	let scale = $state(1);
