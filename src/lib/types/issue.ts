@@ -21,6 +21,21 @@ export interface RelationshipSuggestion {
 	reason: string;
 }
 
+// A set of graph changes that together improve the dependency structure
+export interface GraphImprovement {
+	id: string; // Unique ID for this improvement set
+	description: string; // Human-readable description of the improvement
+	confidence: number;
+	changes: GraphChange[];
+}
+
+export interface GraphChange {
+	action: 'add' | 'remove';
+	fromId: string; // Issue that has/will have the dependency
+	toId: string; // Issue being depended on
+	reason: string;
+}
+
 export interface SuggestedAction {
 	title: string;
 	description: string;

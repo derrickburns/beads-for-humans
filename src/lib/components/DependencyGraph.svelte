@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { issueStore } from '$lib/stores/issues.svelte';
 	import { goto } from '$app/navigation';
-	import type { Issue, RelationshipSuggestion } from '$lib/types/issue';
+	import type { Issue, RelationshipSuggestion, GraphImprovement } from '$lib/types/issue';
 
 	// Props
 	interface Props {
@@ -22,8 +22,15 @@
 
 	// AI Suggestions state
 	let suggestions = $state<RelationshipSuggestion[]>([]);
+	let improvements = $state<GraphImprovement[]>([]);
 	let loadingSuggestions = $state(false);
 	let dismissedSuggestions = $state<Set<string>>(new Set());
+	let dismissedImprovements = $state<Set<string>>(new Set());
+
+	// Active improvements (not dismissed)
+	let activeImprovements = $derived(
+		improvements.filter((imp) => !dismissedImprovements.has(imp.id))
+	);
 
 	// Active suggestions for the focused issue (filtered for validity)
 	let activeSuggestions = $derived(
@@ -34,7 +41,7 @@
 			const focusedIssue = issueStore.getById(focusedIssueId);
 			if (!focusedIssue) return false;
 
-			// Already a dependency
+			// Already a direct dependency
 			if (focusedIssue.dependencies.includes(s.targetId)) return false;
 
 			// Target doesn't exist
@@ -42,6 +49,10 @@
 
 			// Would create a cycle
 			if (issueStore.wouldCreateCycle(focusedIssueId, s.targetId)) return false;
+
+			// Would be redundant (already reachable transitively)
+			const transitiveDeps = issueStore.getTransitiveDependencies(focusedIssueId);
+			if (transitiveDeps.has(s.targetId)) return false;
 
 			return true;
 		})
@@ -61,7 +72,9 @@
 	$effect(() => {
 		if (focusedIssueId) {
 			suggestions = [];
+			improvements = [];
 			dismissedSuggestions = new Set();
+			dismissedImprovements = new Set();
 			// Auto-trigger AI suggestions after a short delay
 			const timer = setTimeout(() => {
 				loadAISuggestions();
@@ -300,6 +313,7 @@
 		panY = 0;
 		focusedIssueId = null;
 		suggestions = [];
+		improvements = [];
 	}
 
 	// Click handling
@@ -352,15 +366,18 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					issue: { title: issue.title, description: issue.description },
-					existingIssues: issueStore.issues.filter((i) => i.id !== issue.id)
+					existingIssues: issueStore.issues,
+					currentIssueId: focusedIssueId
 				})
 			});
 			if (response.ok) {
 				const data = await response.json();
 				suggestions = data.suggestions || [];
+				improvements = data.improvements || [];
 			}
 		} catch {
 			suggestions = [];
+			improvements = [];
 		} finally {
 			loadingSuggestions = false;
 		}
@@ -381,6 +398,32 @@
 
 	function dismissSuggestion(suggestion: RelationshipSuggestion) {
 		dismissedSuggestions = new Set([...dismissedSuggestions, suggestion.targetId]);
+	}
+
+	function acceptImprovement(improvement: GraphImprovement) {
+		let hasError = false;
+		// Apply all changes in the improvement set
+		for (const change of improvement.changes) {
+			if (change.action === 'add') {
+				const result = issueStore.addDependency(change.fromId, change.toId);
+				if (result.error) {
+					errorMessage = result.error;
+					hasError = true;
+					break;
+				}
+			} else if (change.action === 'remove') {
+				issueStore.removeDependency(change.fromId, change.toId);
+			}
+		}
+		if (!hasError) {
+			improvements = improvements.filter((imp) => imp.id !== improvement.id);
+		} else {
+			setTimeout(() => (errorMessage = null), 3000);
+		}
+	}
+
+	function dismissImprovement(improvement: GraphImprovement) {
+		dismissedImprovements = new Set([...dismissedImprovements, improvement.id]);
 	}
 </script>
 
@@ -509,6 +552,61 @@
 							</div>
 						</div>
 					{/if}
+				{/each}
+			</div>
+		</div>
+	{/if}
+
+	<!-- Graph Improvements Panel -->
+	{#if activeImprovements.length > 0}
+		<div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+			<div class="flex items-center gap-2 mb-3">
+				<svg class="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+				</svg>
+				<span class="font-medium text-amber-900">AI Graph Improvements</span>
+				<span class="text-sm text-amber-600">({activeImprovements.length} set{activeImprovements.length !== 1 ? 's' : ''})</span>
+			</div>
+			<div class="space-y-3">
+				{#each activeImprovements as improvement}
+					<div class="bg-white border border-amber-200 rounded-lg p-3 shadow-sm">
+						<div class="flex items-start justify-between gap-3">
+							<div class="flex-1">
+								<p class="text-sm font-medium text-gray-900">{improvement.description}</p>
+								<div class="mt-2 space-y-1">
+									{#each improvement.changes as change}
+										{@const fromIssue = issueStore.getById(change.fromId)}
+										{@const toIssue = issueStore.getById(change.toId)}
+										<div class="flex items-center gap-2 text-xs">
+											<span class="px-1.5 py-0.5 rounded font-medium {change.action === 'add' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
+												{change.action === 'add' ? '+' : '−'}
+											</span>
+											<span class="text-gray-600">
+												"{fromIssue?.title.slice(0, 20) || change.fromId}" → "{toIssue?.title.slice(0, 20) || change.toId}"
+											</span>
+										</div>
+									{/each}
+								</div>
+							</div>
+							<div class="flex items-center gap-1 flex-shrink-0">
+								<button
+									onclick={() => acceptImprovement(improvement)}
+									class="px-3 py-1.5 text-sm font-medium text-white bg-amber-600 rounded-md hover:bg-amber-700 transition-colors"
+								>
+									Apply
+								</button>
+								<button
+									onclick={() => dismissImprovement(improvement)}
+									class="p-1.5 text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+									title="Dismiss"
+								>
+									<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+									</svg>
+								</button>
+							</div>
+						</div>
+					</div>
 				{/each}
 			</div>
 		</div>
