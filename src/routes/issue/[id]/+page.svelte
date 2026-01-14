@@ -5,6 +5,7 @@
 	import { PRIORITY_LABELS, TYPE_LABELS, STATUS_LABELS } from '$lib/types/issue';
 	import type { IssueStatus } from '$lib/types/issue';
 	import IssueForm from '$lib/components/IssueForm.svelte';
+	import SuggestedActions from '$lib/components/SuggestedActions.svelte';
 
 	let id = $derived($page.params.id);
 	let issue = $derived(issueStore.getById(id));
@@ -198,6 +199,13 @@
 								</a>
 							{/each}
 						</div>
+					</div>
+				{/if}
+
+				<!-- AI Suggested Actions -->
+				{#if issue.status !== 'closed'}
+					<div class="pt-4 border-t border-gray-100">
+						<SuggestedActions {issue} />
 					</div>
 				{/if}
 

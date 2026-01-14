@@ -21,6 +21,18 @@ export interface RelationshipSuggestion {
 	reason: string;
 }
 
+export interface SuggestedAction {
+	title: string;
+	description: string;
+	type: IssueType;
+	priority: IssuePriority;
+	relationship: {
+		type: 'dependency' | 'blocks' | 'related';
+		targetId: string;
+		reason: string;
+	};
+}
+
 export const PRIORITY_LABELS: Record<IssuePriority, string> = {
 	0: 'P0 - Critical',
 	1: 'P1 - High',
