@@ -6,6 +6,7 @@
 	import type { IssueStatus, RelationshipSuggestion } from '$lib/types/issue';
 	import IssueForm from '$lib/components/IssueForm.svelte';
 	import SuggestedActions from '$lib/components/SuggestedActions.svelte';
+	import Toast from '$lib/components/Toast.svelte';
 
 	let id = $derived($page.params.id);
 	let issue = $derived(issueStore.getById(id));
@@ -22,6 +23,9 @@
 	let dependencyError = $state<string | null>(null);
 	let cycleBreakOptions = $state<Array<{from: string; to: string; fromTitle: string; toTitle: string}>>([]);
 	let pendingDependencyAction = $state<{type: 'add' | 'block' | 'reverse'; targetId: string} | null>(null);
+
+	// Toast notification state
+	let toast = $state<{ message: string; action?: { label: string; href: string } } | null>(null);
 
 	// AI dependency suggestions state
 	let depSuggestions = $state<RelationshipSuggestion[]>([]);
@@ -81,6 +85,13 @@
 			if (result.error) {
 				dependencyError = result.error;
 				setTimeout(clearError, 3000);
+			} else {
+				// Show success toast with View in Graph link
+				const targetIssue = issueStore.getById(suggestion.targetId);
+				toast = {
+					message: `Dependency added: ${targetIssue?.title.slice(0, 30) || 'issue'}`,
+					action: { label: 'View in Graph', href: `/?focus=${issue.id}` }
+				};
 			}
 		}
 	}
@@ -726,4 +737,13 @@
 			</div>
 		</div>
 	{/if}
+{/if}
+
+<!-- Toast notification -->
+{#if toast}
+	<Toast
+		message={toast.message}
+		action={toast.action}
+		onClose={() => (toast = null)}
+	/>
 {/if}
