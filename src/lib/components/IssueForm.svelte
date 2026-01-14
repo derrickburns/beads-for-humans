@@ -27,6 +27,9 @@
 	let dismissedSuggestions = $state<Set<string>>(new Set());
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+	// AI description generation state
+	let generatingDescription = $state(false);
+
 	let availableDependencies = $derived(
 		issueStore.issues.filter((i) => i.id !== issue?.id && i.status !== 'closed')
 	);
@@ -133,6 +136,30 @@
 	function handleDismissSuggestion(suggestion: RelationshipSuggestion) {
 		dismissedSuggestions = new Set([...dismissedSuggestions, suggestion.targetId]);
 	}
+
+	async function generateDescription() {
+		if (title.length < 3) return;
+
+		generatingDescription = true;
+		try {
+			const response = await fetch('/api/generate-description', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ title, type })
+			});
+
+			if (response.ok) {
+				const data = await response.json();
+				if (data.description) {
+					description = data.description;
+				}
+			}
+		} catch (e) {
+			console.error('Failed to generate description:', e);
+		} finally {
+			generatingDescription = false;
+		}
+	}
 </script>
 
 <form onsubmit={handleSubmit} class="space-y-6">
@@ -151,9 +178,29 @@
 
 	<!-- Description -->
 	<div>
-		<label for="description" class="block text-sm font-medium text-gray-700 mb-1">
-			Description
-		</label>
+		<div class="flex items-center justify-between mb-1">
+			<label for="description" class="block text-sm font-medium text-gray-700">
+				Description
+			</label>
+			{#if title.length >= 3 && !description}
+				<button
+					type="button"
+					onclick={generateDescription}
+					disabled={generatingDescription}
+					class="text-xs font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50 flex items-center gap-1"
+				>
+					{#if generatingDescription}
+						<span class="w-3 h-3 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin"></span>
+						Generating...
+					{:else}
+						<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+						</svg>
+						Generate with AI
+					{/if}
+				</button>
+			{/if}
+		</div>
 		<textarea
 			id="description"
 			bind:value={description}
