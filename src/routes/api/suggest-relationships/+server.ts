@@ -1,21 +1,13 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { Issue, RelationshipSuggestion } from '$lib/types/issue';
-import { env } from '$env/dynamic/private';
-
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+import { chatCompletion } from '$lib/ai/provider';
 
 export const POST: RequestHandler = async ({ request }) => {
-	const apiKey = env.ANTHROPIC_API_KEY;
-
-	// Gracefully handle missing API key - just return no suggestions
-	if (!apiKey) {
-		return json({ suggestions: [] });
-	}
-
-	const { issue, existingIssues } = await request.json() as {
+	const { issue, existingIssues, model } = await request.json() as {
 		issue: { title: string; description: string };
 		existingIssues: Issue[];
+		model?: string;
 	};
 
 	if (!issue || !existingIssues) {
@@ -65,39 +57,19 @@ Respond in JSON format:
 Only suggest relationships with confidence >= 0.5. Return empty suggestions array if no clear relationships exist.`;
 
 	try {
-		const response = await fetch(ANTHROPIC_API_URL, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				'x-api-key': apiKey,
-				'anthropic-version': '2023-06-01'
-			},
-			body: JSON.stringify({
-				model: 'claude-sonnet-4-20250514',
-				max_tokens: 1024,
-				messages: [
-					{
-						role: 'user',
-						content: prompt
-					}
-				]
-			})
+		const result = await chatCompletion({
+			messages: [{ role: 'user', content: prompt }],
+			maxTokens: 1024,
+			model
 		});
 
-		if (!response.ok) {
-			console.error('Anthropic API error:', await response.text());
-			return json({ suggestions: [] });
-		}
-
-		const data = await response.json();
-		const content = data.content?.[0]?.text;
-
-		if (!content) {
+		if (result.error || !result.content) {
+			console.error('AI API error:', result.error);
 			return json({ suggestions: [] });
 		}
 
 		// Parse JSON from response
-		const jsonMatch = content.match(/\{[\s\S]*\}/);
+		const jsonMatch = result.content.match(/\{[\s\S]*\}/);
 		if (!jsonMatch) {
 			return json({ suggestions: [] });
 		}
@@ -116,7 +88,7 @@ Only suggest relationships with confidence >= 0.5. Return empty suggestions arra
 
 		return json({ suggestions: validSuggestions });
 	} catch (error) {
-		console.error('Error calling Anthropic API:', error);
+		console.error('Error calling AI API:', error);
 		return json({ suggestions: [] });
 	}
 };

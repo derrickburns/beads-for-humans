@@ -1,20 +1,13 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { IssueType } from '$lib/types/issue';
-import { env } from '$env/dynamic/private';
-
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+import { chatCompletion } from '$lib/ai/provider';
 
 export const POST: RequestHandler = async ({ request }) => {
-	const apiKey = env.ANTHROPIC_API_KEY;
-
-	if (!apiKey) {
-		return json({ description: '' });
-	}
-
-	const { title, type } = (await request.json()) as {
+	const { title, type, model } = (await request.json()) as {
 		title: string;
 		type: IssueType;
+		model?: string;
 	};
 
 	if (!title || title.length < 3) {
@@ -41,31 +34,20 @@ Keep it concise and actionable. Don't repeat the title. Don't use bullet points 
 Respond with ONLY the description text, nothing else.`;
 
 	try {
-		const response = await fetch(ANTHROPIC_API_URL, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				'x-api-key': apiKey,
-				'anthropic-version': '2023-06-01'
-			},
-			body: JSON.stringify({
-				model: 'claude-sonnet-4-20250514',
-				max_tokens: 300,
-				messages: [{ role: 'user', content: prompt }]
-			})
+		const result = await chatCompletion({
+			messages: [{ role: 'user', content: prompt }],
+			maxTokens: 300,
+			model
 		});
 
-		if (!response.ok) {
-			console.error('Anthropic API error:', await response.text());
+		if (result.error || !result.content) {
+			console.error('AI API error:', result.error);
 			return json({ description: '' });
 		}
 
-		const data = await response.json();
-		const description = data.content?.[0]?.text?.trim() || '';
-
-		return json({ description });
+		return json({ description: result.content.trim() });
 	} catch (error) {
-		console.error('Error calling Anthropic API:', error);
+		console.error('Error calling AI API:', error);
 		return json({ description: '' });
 	}
 };

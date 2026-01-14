@@ -1,9 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { Issue, IssueType, IssuePriority } from '$lib/types/issue';
-import { env } from '$env/dynamic/private';
-
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+import { chatCompletion } from '$lib/ai/provider';
 
 export interface SuggestedAction {
 	title: string;
@@ -18,15 +16,10 @@ export interface SuggestedAction {
 }
 
 export const POST: RequestHandler = async ({ request }) => {
-	const apiKey = env.ANTHROPIC_API_KEY;
-
-	if (!apiKey) {
-		return json({ suggestions: [] });
-	}
-
-	const { issue, existingIssues } = (await request.json()) as {
+	const { issue, existingIssues, model } = (await request.json()) as {
 		issue: Issue;
 		existingIssues: Issue[];
+		model?: string;
 	};
 
 	if (!issue) {
@@ -79,33 +72,18 @@ Respond in JSON format:
 Be practical and specific. Suggest actions that a real team would actually need to do.`;
 
 	try {
-		const response = await fetch(ANTHROPIC_API_URL, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				'x-api-key': apiKey,
-				'anthropic-version': '2023-06-01'
-			},
-			body: JSON.stringify({
-				model: 'claude-sonnet-4-20250514',
-				max_tokens: 1500,
-				messages: [{ role: 'user', content: prompt }]
-			})
+		const result = await chatCompletion({
+			messages: [{ role: 'user', content: prompt }],
+			maxTokens: 1500,
+			model
 		});
 
-		if (!response.ok) {
-			console.error('Anthropic API error:', await response.text());
+		if (result.error || !result.content) {
+			console.error('AI API error:', result.error);
 			return json({ suggestions: [] });
 		}
 
-		const data = await response.json();
-		const content = data.content?.[0]?.text;
-
-		if (!content) {
-			return json({ suggestions: [] });
-		}
-
-		const jsonMatch = content.match(/\{[\s\S]*\}/);
+		const jsonMatch = result.content.match(/\{[\s\S]*\}/);
 		if (!jsonMatch) {
 			return json({ suggestions: [] });
 		}
@@ -135,7 +113,7 @@ Be practical and specific. Suggest actions that a real team would actually need 
 
 		return json({ suggestions });
 	} catch (error) {
-		console.error('Error calling Anthropic API:', error);
+		console.error('Error calling AI API:', error);
 		return json({ suggestions: [] });
 	}
 };

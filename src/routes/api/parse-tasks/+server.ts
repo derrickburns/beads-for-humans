@@ -1,9 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { Issue, IssueType, IssuePriority } from '$lib/types/issue';
-import { env } from '$env/dynamic/private';
-
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+import { chatCompletion } from '$lib/ai/provider';
 
 export interface ParsedTask {
 	tempId: string;
@@ -21,15 +19,10 @@ export interface ParseResult {
 }
 
 export const POST: RequestHandler = async ({ request }) => {
-	const apiKey = env.ANTHROPIC_API_KEY;
-
-	if (!apiKey) {
-		return json({ error: 'AI features not configured', tasks: [], reasoning: '' });
-	}
-
-	const { text, existingIssues } = (await request.json()) as {
+	const { text, existingIssues, model } = (await request.json()) as {
 		text: string;
 		existingIssues: Issue[];
+		model?: string;
 	};
 
 	if (!text || text.trim().length < 10) {
@@ -81,33 +74,18 @@ Important:
 - Keep descriptions concise but informative`;
 
 	try {
-		const response = await fetch(ANTHROPIC_API_URL, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				'x-api-key': apiKey,
-				'anthropic-version': '2023-06-01'
-			},
-			body: JSON.stringify({
-				model: 'claude-sonnet-4-20250514',
-				max_tokens: 4000,
-				messages: [{ role: 'user', content: prompt }]
-			})
+		const result = await chatCompletion({
+			messages: [{ role: 'user', content: prompt }],
+			maxTokens: 4000,
+			model
 		});
 
-		if (!response.ok) {
-			console.error('Anthropic API error:', await response.text());
+		if (result.error || !result.content) {
+			console.error('AI API error:', result.error);
 			return json({ error: 'Failed to parse tasks', tasks: [], reasoning: '' });
 		}
 
-		const data = await response.json();
-		const content = data.content?.[0]?.text;
-
-		if (!content) {
-			return json({ error: 'No response from AI', tasks: [], reasoning: '' });
-		}
-
-		const jsonMatch = content.match(/\{[\s\S]*\}/);
+		const jsonMatch = result.content.match(/\{[\s\S]*\}/);
 		if (!jsonMatch) {
 			return json({ error: 'Could not parse AI response', tasks: [], reasoning: '' });
 		}

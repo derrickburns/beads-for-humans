@@ -1,9 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { Issue, IssueType, IssuePriority } from '$lib/types/issue';
-import { env } from '$env/dynamic/private';
-
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+import { chatCompletion } from '$lib/ai/provider';
 
 interface Message {
 	role: 'user' | 'assistant';
@@ -34,16 +32,11 @@ interface AssistantResponse {
 }
 
 export const POST: RequestHandler = async ({ request }) => {
-	const apiKey = env.ANTHROPIC_API_KEY;
-
-	if (!apiKey) {
-		return json({ error: 'AI features not configured' });
-	}
-
-	const { messages, existingIssues, createdInSession } = (await request.json()) as {
+	const { messages, existingIssues, createdInSession, model } = (await request.json()) as {
 		messages: Message[];
 		existingIssues: Issue[];
 		createdInSession: string[]; // Titles of issues created this session
+		model?: string;
 	};
 
 	if (!messages || messages.length === 0) {
@@ -111,47 +104,34 @@ For completion (no more tasks to suggest):
 Priority levels: 0=Critical, 1=High, 2=Medium, 3=Low, 4=Backlog
 Only suggest confidence >= 0.85. If unsure, ask a clarifying question instead.`;
 
-	const conversationMessages = messages.map(m => ({
-		role: m.role as 'user' | 'assistant',
-		content: m.content
-	}));
+	const conversationMessages = [
+		{ role: 'system' as const, content: systemPrompt },
+		...messages.map(m => ({
+			role: m.role as 'user' | 'assistant',
+			content: m.content
+		}))
+	];
 
 	try {
-		const response = await fetch(ANTHROPIC_API_URL, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				'x-api-key': apiKey,
-				'anthropic-version': '2023-06-01'
-			},
-			body: JSON.stringify({
-				model: 'claude-sonnet-4-20250514',
-				max_tokens: 2000,
-				system: systemPrompt,
-				messages: conversationMessages
-			})
+		const result = await chatCompletion({
+			messages: conversationMessages,
+			maxTokens: 2000,
+			model
 		});
 
-		if (!response.ok) {
-			console.error('Anthropic API error:', await response.text());
+		if (result.error || !result.content) {
+			console.error('AI API error:', result.error);
 			return json({ error: 'Failed to get response from AI' });
 		}
 
-		const data = await response.json();
-		const content = data.content?.[0]?.text;
-
-		if (!content) {
-			return json({ error: 'No response from AI' });
-		}
-
 		// Parse JSON response
-		const jsonMatch = content.match(/\{[\s\S]*\}/);
+		const jsonMatch = result.content.match(/\{[\s\S]*\}/);
 		if (!jsonMatch) {
 			// If AI didn't return JSON, wrap the response
 			return json({
 				response: {
 					type: 'question',
-					message: content,
+					message: result.content,
 					followUpQuestions: []
 				}
 			});

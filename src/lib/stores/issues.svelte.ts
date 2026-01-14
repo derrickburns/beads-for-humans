@@ -300,6 +300,211 @@ class IssueStore {
 		saveIssues(this.issues);
 		return true;
 	}
+
+	// ===== Graph Health Analysis =====
+
+	// Find dependencies pointing to non-existent issues
+	findInvalidDependencies(): Array<{ issueId: string; issueTitle: string; invalidDepId: string }> {
+		const invalid: Array<{ issueId: string; issueTitle: string; invalidDepId: string }> = [];
+		const issueIds = new Set(this.issues.map(i => i.id));
+
+		for (const issue of this.issues) {
+			for (const depId of issue.dependencies) {
+				if (!issueIds.has(depId)) {
+					invalid.push({
+						issueId: issue.id,
+						issueTitle: issue.title,
+						invalidDepId: depId
+					});
+				}
+			}
+		}
+		return invalid;
+	}
+
+	// Find redundant transitive dependencies
+	// If A depends on B, and B depends on C, then A depending on C is redundant
+	findRedundantDependencies(): Array<{
+		issueId: string;
+		issueTitle: string;
+		redundantDepId: string;
+		redundantDepTitle: string;
+		throughId: string;
+		throughTitle: string;
+	}> {
+		const redundant: Array<{
+			issueId: string;
+			issueTitle: string;
+			redundantDepId: string;
+			redundantDepTitle: string;
+			throughId: string;
+			throughTitle: string;
+		}> = [];
+
+		for (const issue of this.issues) {
+			if (issue.dependencies.length < 2) continue;
+
+			// For each dependency, compute all transitive dependencies
+			const transitiveReach = new Map<string, Set<string>>();
+
+			for (const depId of issue.dependencies) {
+				const reachable = this.getTransitiveDependencies(depId);
+				transitiveReach.set(depId, reachable);
+			}
+
+			// Check if any direct dependency is reachable through another
+			for (const depId of issue.dependencies) {
+				for (const [otherId, reachable] of transitiveReach) {
+					if (otherId !== depId && reachable.has(depId)) {
+						const depIssue = this.getById(depId);
+						const throughIssue = this.getById(otherId);
+						if (depIssue && throughIssue) {
+							redundant.push({
+								issueId: issue.id,
+								issueTitle: issue.title,
+								redundantDepId: depId,
+								redundantDepTitle: depIssue.title,
+								throughId: otherId,
+								throughTitle: throughIssue.title
+							});
+						}
+					}
+				}
+			}
+		}
+		return redundant;
+	}
+
+	// Get all transitive dependencies of an issue (not including itself)
+	getTransitiveDependencies(issueId: string): Set<string> {
+		const visited = new Set<string>();
+		const queue = [issueId];
+
+		while (queue.length > 0) {
+			const current = queue.shift()!;
+			if (visited.has(current)) continue;
+			if (current !== issueId) visited.add(current);
+
+			const currentIssue = this.getById(current);
+			if (currentIssue) {
+				for (const depId of currentIssue.dependencies) {
+					if (!visited.has(depId)) {
+						queue.push(depId);
+					}
+				}
+			}
+		}
+		return visited;
+	}
+
+	// Check for existing cycles in the graph (shouldn't happen but might from bugs or imports)
+	findExistingCycles(): Array<{ cycle: string[]; titles: string[] }> {
+		const cycles: Array<{ cycle: string[]; titles: string[] }> = [];
+		const visited = new Set<string>();
+		const recursionStack = new Set<string>();
+
+		const dfs = (issueId: string, path: string[]): boolean => {
+			visited.add(issueId);
+			recursionStack.add(issueId);
+
+			const issue = this.getById(issueId);
+			if (!issue) return false;
+
+			for (const depId of issue.dependencies) {
+				if (!visited.has(depId)) {
+					if (dfs(depId, [...path, issueId])) return true;
+				} else if (recursionStack.has(depId)) {
+					// Found a cycle
+					const cycleStart = path.indexOf(depId);
+					const cyclePath = cycleStart >= 0
+						? [...path.slice(cycleStart), issueId, depId]
+						: [...path, issueId, depId];
+					cycles.push({
+						cycle: cyclePath,
+						titles: cyclePath.map(id => this.getById(id)?.title || id)
+					});
+					return true;
+				}
+			}
+
+			recursionStack.delete(issueId);
+			return false;
+		};
+
+		for (const issue of this.issues) {
+			if (!visited.has(issue.id)) {
+				dfs(issue.id, []);
+			}
+		}
+
+		return cycles;
+	}
+
+	// Aggregate all graph health issues
+	getGraphHealth(): {
+		isHealthy: boolean;
+		invalidDeps: Array<{ issueId: string; issueTitle: string; invalidDepId: string }>;
+		redundantDeps: Array<{
+			issueId: string;
+			issueTitle: string;
+			redundantDepId: string;
+			redundantDepTitle: string;
+			throughId: string;
+			throughTitle: string;
+		}>;
+		cycles: Array<{ cycle: string[]; titles: string[] }>;
+	} {
+		const invalidDeps = this.findInvalidDependencies();
+		const redundantDeps = this.findRedundantDependencies();
+		const cycles = this.findExistingCycles();
+
+		return {
+			isHealthy: invalidDeps.length === 0 && redundantDeps.length === 0 && cycles.length === 0,
+			invalidDeps,
+			redundantDeps,
+			cycles
+		};
+	}
+
+	// Auto-fix: remove invalid dependencies
+	removeInvalidDependencies(): number {
+		let removed = 0;
+		const issueIds = new Set(this.issues.map(i => i.id));
+
+		for (const issue of this.issues) {
+			const validDeps = issue.dependencies.filter(depId => issueIds.has(depId));
+			if (validDeps.length !== issue.dependencies.length) {
+				removed += issue.dependencies.length - validDeps.length;
+				this.update(issue.id, { dependencies: validDeps });
+			}
+		}
+		return removed;
+	}
+
+	// Auto-fix: remove redundant dependencies
+	removeRedundantDependencies(): number {
+		let removed = 0;
+		const redundant = this.findRedundantDependencies();
+
+		// Group by issue to avoid multiple updates
+		const byIssue = new Map<string, Set<string>>();
+		for (const r of redundant) {
+			if (!byIssue.has(r.issueId)) {
+				byIssue.set(r.issueId, new Set());
+			}
+			byIssue.get(r.issueId)!.add(r.redundantDepId);
+		}
+
+		for (const [issueId, redundantDeps] of byIssue) {
+			const issue = this.getById(issueId);
+			if (issue) {
+				const newDeps = issue.dependencies.filter(d => !redundantDeps.has(d));
+				removed += issue.dependencies.length - newDeps.length;
+				this.update(issueId, { dependencies: newDeps });
+			}
+		}
+		return removed;
+	}
 }
 
 export const issueStore = new IssueStore();

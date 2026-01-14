@@ -2,6 +2,7 @@
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import { goto } from '$app/navigation';
+	import AISettings from '$lib/components/AISettings.svelte';
 
 	let { children } = $props();
 	let showShortcuts = $state(false);
@@ -48,6 +49,7 @@
 					Issues
 				</a>
 				<div class="flex items-center gap-3">
+					<AISettings />
 					<button
 						onclick={() => (showShortcuts = true)}
 						class="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 hidden sm:block"

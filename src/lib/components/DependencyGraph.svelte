@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { issueStore } from '$lib/stores/issues.svelte';
+	import { goto } from '$app/navigation';
 	import type { Issue } from '$lib/types/issue';
 
 	// Layout constants
@@ -259,6 +260,10 @@
 			focusedIssueId = id;
 		}
 	}
+
+	function navigateToIssue(id: string) {
+		goto(`/issue/${id}`);
+	}
 </script>
 
 <div class="space-y-4">
@@ -287,7 +292,7 @@
 		</div>
 
 		<div class="text-sm text-gray-400">
-			Scroll to zoom · Drag to pan · Click node to focus
+			Scroll to zoom · Drag to pan · Click to focus · Double-click to edit
 		</div>
 	</div>
 
@@ -356,10 +361,14 @@
 					<g
 						transform="translate({pos.x}, {pos.y})"
 						onclick={() => focusOnIssue(pos.issue.id)}
+						ondblclick={() => navigateToIssue(pos.issue.id)}
 						style="cursor: pointer;"
 						role="button"
 						tabindex="0"
-						onkeydown={(e) => e.key === 'Enter' && focusOnIssue(pos.issue.id)}
+						onkeydown={(e) => {
+							if (e.key === 'Enter') navigateToIssue(pos.issue.id);
+							else if (e.key === ' ') focusOnIssue(pos.issue.id);
+						}}
 					>
 						<rect
 							width={NODE_WIDTH}
