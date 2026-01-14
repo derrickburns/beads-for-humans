@@ -6,6 +6,7 @@
 	import GraphHealth from '$lib/components/GraphHealth.svelte';
 	import DependencyGraph from '$lib/components/DependencyGraph.svelte';
 	import GraphChatSidebar from '$lib/components/GraphChatSidebar.svelte';
+	import ProjectSelector from '$lib/components/ProjectSelector.svelte';
 	import { graphChatStore } from '$lib/stores/graphChat.svelte';
 	import type { IssueStatus } from '$lib/types/issue';
 
@@ -87,29 +88,34 @@
 <div class="space-y-4">
 	<!-- View Toggle -->
 	<div class="flex items-center justify-between">
-		<div class="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
-			<button
-				onclick={() => setViewMode('graph')}
-				class="px-4 py-2 text-sm font-medium rounded-md transition-colors flex items-center gap-2 {viewMode === 'graph'
-					? 'bg-white text-gray-900 shadow-sm'
-					: 'text-gray-600 hover:text-gray-900'}"
-			>
-				<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-				</svg>
-				Graph
-			</button>
-			<button
-				onclick={() => setViewMode('list')}
-				class="px-4 py-2 text-sm font-medium rounded-md transition-colors flex items-center gap-2 {viewMode === 'list'
-					? 'bg-white text-gray-900 shadow-sm'
-					: 'text-gray-600 hover:text-gray-900'}"
-			>
-				<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-				</svg>
-				List
-			</button>
+		<div class="flex items-center gap-3">
+			<div class="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
+				<button
+					onclick={() => setViewMode('graph')}
+					class="px-4 py-2 text-sm font-medium rounded-md transition-colors flex items-center gap-2 {viewMode === 'graph'
+						? 'bg-white text-gray-900 shadow-sm'
+						: 'text-gray-600 hover:text-gray-900'}"
+				>
+					<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+					</svg>
+					Graph
+				</button>
+				<button
+					onclick={() => setViewMode('list')}
+					class="px-4 py-2 text-sm font-medium rounded-md transition-colors flex items-center gap-2 {viewMode === 'list'
+						? 'bg-white text-gray-900 shadow-sm'
+						: 'text-gray-600 hover:text-gray-900'}"
+				>
+					<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+					</svg>
+					List
+				</button>
+			</div>
+
+			<!-- Project Selector -->
+			<ProjectSelector />
 		</div>
 
 		<div class="text-sm text-gray-500">
