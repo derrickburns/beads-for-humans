@@ -1,11 +1,12 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { Issue, RelationshipSuggestion } from '$lib/types/issue';
+import { env } from '$env/dynamic/private';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 
 export const POST: RequestHandler = async ({ request }) => {
-	const apiKey = process.env.ANTHROPIC_API_KEY;
+	const apiKey = env.ANTHROPIC_API_KEY;
 
 	// Gracefully handle missing API key - just return no suggestions
 	if (!apiKey) {

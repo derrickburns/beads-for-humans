@@ -1,11 +1,12 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { IssueType } from '$lib/types/issue';
+import { env } from '$env/dynamic/private';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 
 export const POST: RequestHandler = async ({ request }) => {
-	const apiKey = process.env.ANTHROPIC_API_KEY;
+	const apiKey = env.ANTHROPIC_API_KEY;
 
 	if (!apiKey) {
 		return json({ description: '' });

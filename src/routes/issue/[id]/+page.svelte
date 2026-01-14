@@ -15,6 +15,10 @@
 	let editing = $state(false);
 	let showDeleteConfirm = $state(false);
 	let showAddDependency = $state(false);
+	let showAddBlocking = $state(false);
+	let showCreateRelated = $state(false);
+	let newRelatedTitle = $state('');
+	let newRelatedType = $state<'dependency' | 'blocks'>('blocks');
 
 	// AI dependency suggestions state
 	let depSuggestions = $state<RelationshipSuggestion[]>([]);
@@ -25,6 +29,13 @@
 	let availableForDependency = $derived(
 		issueStore.issues.filter(
 			(i) => i.id !== issue?.id && !issue?.dependencies.includes(i.id) && i.status !== 'closed'
+		)
+	);
+
+	// Available issues that this issue could block (not self, doesn't already depend on this)
+	let availableForBlocking = $derived(
+		issueStore.issues.filter(
+			(i) => i.id !== issue?.id && !i.dependencies.includes(issue?.id ?? '') && i.status !== 'closed'
 		)
 	);
 
@@ -78,10 +89,57 @@
 		}
 	}
 
+	function addAsBlockerTo(targetId: string) {
+		if (issue) {
+			// Add this issue as a dependency of the target (target depends on this)
+			issueStore.addDependency(targetId, issue.id);
+			showAddBlocking = false;
+		}
+	}
+
 	function removeDependency(depId: string) {
 		if (issue) {
 			issueStore.removeDependency(issue.id, depId);
 		}
+	}
+
+	function removeBlocking(targetId: string) {
+		// Remove this issue from target's dependencies
+		issueStore.removeDependency(targetId, issue?.id ?? '');
+	}
+
+	function createRelatedIssue() {
+		if (!issue || !newRelatedTitle.trim()) return;
+
+		if (newRelatedType === 'blocks') {
+			// Create issue that depends on this one
+			const newIssue = issueStore.create({
+				title: newRelatedTitle.trim(),
+				description: '',
+				priority: issue.priority,
+				type: 'task',
+				dependencies: [issue.id]
+			});
+			if (newIssue) {
+				goto(`/issue/${newIssue.id}`);
+			}
+		} else {
+			// Create issue that this one depends on
+			const newIssue = issueStore.create({
+				title: newRelatedTitle.trim(),
+				description: '',
+				priority: issue.priority,
+				type: 'task',
+				dependencies: []
+			});
+			if (newIssue) {
+				issueStore.addDependency(issue.id, newIssue.id);
+				goto(`/issue/${newIssue.id}`);
+			}
+		}
+
+		newRelatedTitle = '';
+		showCreateRelated = false;
 	}
 
 	const statusColors: Record<string, string> = {
@@ -375,26 +433,132 @@
 					</div>
 				{/if}
 
-				<!-- Blocking -->
-				{#if blocking.length > 0}
-					<div>
-						<h3 class="text-sm font-medium text-gray-500 mb-2">
+				<!-- Blocking (issues that depend on this one) -->
+				<div>
+					<div class="flex items-center justify-between mb-2">
+						<h3 class="text-sm font-medium text-gray-500">
 							Blocking ({blocking.length})
 						</h3>
+						{#if availableForBlocking.length > 0}
+							<button
+								onclick={() => (showAddBlocking = !showAddBlocking)}
+								class="text-xs font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1"
+							>
+								<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+								</svg>
+								Add
+							</button>
+						{/if}
+					</div>
+
+					<!-- Manual Add Blocking Dropdown -->
+					{#if showAddBlocking && availableForBlocking.length > 0}
+						<div class="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+							<p class="text-xs text-gray-500 mb-2">Select an issue that should wait for this one:</p>
+							<div class="space-y-1 max-h-40 overflow-y-auto">
+								{#each availableForBlocking as target}
+									<button
+										onclick={() => addAsBlockerTo(target.id)}
+										class="w-full text-left px-3 py-2 text-sm rounded hover:bg-gray-100 transition-colors flex items-center justify-between"
+									>
+										<span class="truncate">{target.title}</span>
+										<span class="text-xs text-gray-400 ml-2">P{target.priority}</span>
+									</button>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
+					{#if blocking.length > 0}
 						<div class="space-y-2">
 							{#each blocking as blocked}
-								<a
-									href="/issue/{blocked.id}"
-									class="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
-								>
-									<div class="w-2 h-2 rounded-full bg-amber-500"></div>
-									<span class="font-medium text-gray-900">{blocked.title}</span>
-									<span class="text-xs text-gray-500">Waiting</span>
-								</a>
+								<div class="flex items-center gap-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+									<div class="w-2 h-2 rounded-full bg-purple-500"></div>
+									<a href="/issue/{blocked.id}" class="flex-1 font-medium text-gray-900 hover:text-blue-600 truncate">
+										{blocked.title}
+									</a>
+									<span class="text-xs text-gray-500">Waiting on this</span>
+									<button
+										onclick={() => removeBlocking(blocked.id)}
+										class="p-1 text-gray-400 hover:text-red-600 transition-colors"
+										title="Remove blocking relationship"
+									>
+										<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+										</svg>
+									</button>
+								</div>
 							{/each}
 						</div>
+					{:else}
+						<p class="text-sm text-gray-400">Not blocking any issues</p>
+					{/if}
+				</div>
+
+				<!-- Create Related Issue -->
+				<div class="pt-4 border-t border-gray-100">
+					<div class="flex items-center justify-between mb-2">
+						<h3 class="text-sm font-medium text-gray-500">Create Related Issue</h3>
+						<button
+							onclick={() => (showCreateRelated = !showCreateRelated)}
+							class="text-xs font-medium text-green-600 hover:text-green-700 flex items-center gap-1"
+						>
+							<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+							</svg>
+							New Issue
+						</button>
 					</div>
-				{/if}
+
+					{#if showCreateRelated}
+						<div class="p-3 bg-green-50 border border-green-200 rounded-lg space-y-3">
+							<input
+								type="text"
+								bind:value={newRelatedTitle}
+								placeholder="New issue title..."
+								class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+							/>
+							<div class="flex items-center gap-4">
+								<label class="flex items-center gap-2 text-sm">
+									<input
+										type="radio"
+										bind:group={newRelatedType}
+										value="blocks"
+										class="text-green-600"
+									/>
+									<span>This blocks new issue</span>
+								</label>
+								<label class="flex items-center gap-2 text-sm">
+									<input
+										type="radio"
+										bind:group={newRelatedType}
+										value="dependency"
+										class="text-green-600"
+									/>
+									<span>New issue blocks this</span>
+								</label>
+							</div>
+							<div class="flex items-center gap-2">
+								<button
+									onclick={createRelatedIssue}
+									disabled={!newRelatedTitle.trim()}
+									class="px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
+								>
+									Create & Open
+								</button>
+								<button
+									onclick={() => { showCreateRelated = false; newRelatedTitle = ''; }}
+									class="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900"
+								>
+									Cancel
+								</button>
+							</div>
+						</div>
+					{:else}
+						<p class="text-sm text-gray-400">Quickly create issues discovered while working on this one</p>
+					{/if}
+				</div>
 
 				<!-- AI Suggested Actions -->
 				{#if issue.status !== 'closed'}
