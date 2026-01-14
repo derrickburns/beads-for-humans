@@ -253,6 +253,33 @@
 		focusedIssueId = null;
 	}
 
+	// Click handling with single/double click distinction
+	let clickTimer: ReturnType<typeof setTimeout> | null = null;
+	let clickedId: string | null = null;
+	const DOUBLE_CLICK_DELAY = 250;
+
+	function handleNodeClick(e: MouseEvent, id: string) {
+		e.stopPropagation(); // Prevent panning
+
+		if (clickTimer && clickedId === id) {
+			// Double click detected
+			clearTimeout(clickTimer);
+			clickTimer = null;
+			clickedId = null;
+			navigateToIssue(id);
+		} else {
+			// Possible single click - wait to see if double click follows
+			if (clickTimer) clearTimeout(clickTimer);
+			clickedId = id;
+			clickTimer = setTimeout(() => {
+				// Single click confirmed
+				focusOnIssue(id);
+				clickTimer = null;
+				clickedId = null;
+			}, DOUBLE_CLICK_DELAY);
+		}
+	}
+
 	function focusOnIssue(id: string) {
 		if (focusedIssueId === id) {
 			focusedIssueId = null;
@@ -360,8 +387,8 @@
 					{@const isFocused = focusedIssueId === pos.issue.id}
 					<g
 						transform="translate({pos.x}, {pos.y})"
-						onclick={() => focusOnIssue(pos.issue.id)}
-						ondblclick={() => navigateToIssue(pos.issue.id)}
+						onclick={(e) => handleNodeClick(e, pos.issue.id)}
+						onmousedown={(e) => e.stopPropagation()}
 						style="cursor: pointer;"
 						role="button"
 						tabindex="0"
