@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { issueStore } from '$lib/stores/issues.svelte';
 	import { aiSettings } from '$lib/stores/aiSettings.svelte';
-	import type { Issue, IssueType, IssuePriority } from '$lib/types/issue';
+	import type { Issue, IssueType, IssuePriority, ExecutionType } from '$lib/types/issue';
+	import { EXECUTION_TYPE_LABELS } from '$lib/types/issue';
 	import { toFriendlyError, type FriendlyError } from '$lib/utils/errors';
 	import FollowUpSuggestions from './FollowUpSuggestions.svelte';
 
@@ -12,6 +13,10 @@
 		description: string;
 		type: IssueType;
 		priority: IssuePriority;
+		executionType?: ExecutionType;
+		aiConfidence?: number;
+		validationRequired?: boolean;
+		executionReason?: string;
 	} | null>(null);
 	let error = $state<FriendlyError | null>(null);
 	let createdIssue = $state<Issue | null>(null);
@@ -57,7 +62,11 @@
 			title: expandedResult.title,
 			description: expandedResult.description,
 			type: expandedResult.type,
-			priority: expandedResult.priority
+			priority: expandedResult.priority,
+			executionType: expandedResult.executionType,
+			aiConfidence: expandedResult.aiConfidence,
+			validationRequired: expandedResult.validationRequired,
+			executionReason: expandedResult.executionReason
 		});
 
 		// Show follow-up suggestions
@@ -101,6 +110,13 @@
 		2: 'P2 - Medium',
 		3: 'P3 - Low',
 		4: 'P4 - Backlog'
+	};
+
+	const executionTypeColors: Record<ExecutionType, string> = {
+		automated: 'bg-emerald-100 text-emerald-700',
+		human: 'bg-red-100 text-red-700',
+		ai_assisted: 'bg-sky-100 text-sky-700',
+		human_assisted: 'bg-violet-100 text-violet-700'
 	};
 </script>
 
@@ -180,13 +196,23 @@
 		<div class="space-y-4">
 			<div class="flex items-start justify-between">
 				<h3 class="text-lg font-semibold text-gray-900">Review & Create</h3>
-				<div class="flex gap-2">
+				<div class="flex flex-wrap gap-2">
 					<span class="px-2 py-1 text-xs font-medium rounded-full {typeColors[expandedResult.type]}">
 						{expandedResult.type}
 					</span>
 					<span class="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700">
 						{priorityLabels[expandedResult.priority]}
 					</span>
+					{#if expandedResult.executionType}
+						<span class="px-2 py-1 text-xs font-medium rounded-full {executionTypeColors[expandedResult.executionType]}">
+							{EXECUTION_TYPE_LABELS[expandedResult.executionType]}
+						</span>
+						{#if expandedResult.validationRequired}
+							<span class="px-2 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
+								✓ Needs Review
+							</span>
+						{/if}
+					{/if}
 				</div>
 			</div>
 
@@ -199,6 +225,24 @@
 					<span class="block text-xs font-medium text-gray-500 mb-1">Description</span>
 					<p class="text-gray-700 text-sm">{expandedResult.description}</p>
 				</div>
+				{#if expandedResult.executionReason}
+					<div>
+						<span class="block text-xs font-medium text-gray-500 mb-1">Who Should Do This</span>
+						<p class="text-gray-600 text-sm">{expandedResult.executionReason}</p>
+						{#if expandedResult.aiConfidence !== undefined}
+							<div class="flex items-center gap-2 mt-1">
+								<span class="text-xs text-gray-400">AI confidence:</span>
+								<div class="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+									<div
+										class="h-full rounded-full {expandedResult.aiConfidence > 0.7 ? 'bg-green-500' : expandedResult.aiConfidence > 0.4 ? 'bg-amber-500' : 'bg-red-500'}"
+										style="width: {expandedResult.aiConfidence * 100}%"
+									></div>
+								</div>
+								<span class="text-xs text-gray-400">{Math.round(expandedResult.aiConfidence * 100)}%</span>
+							</div>
+						{/if}
+					</div>
+				{/if}
 			</div>
 
 			<div class="flex items-center justify-between pt-2">
