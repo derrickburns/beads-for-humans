@@ -1,5 +1,35 @@
 # Agent Instructions
 
+## Product Vision
+
+**Beads** is an AI-powered project planning tool for non-experts tackling life's major projects.
+
+### The Problem
+Most people encounter complex, high-stakes projects only once or twice in their lifetimes—electing a pension plan, preparing a house for sale, remodeling a kitchen, choosing a high school or college for a child. They lack expertise and often rely on expensive paid advisors or general contractors.
+
+Traditional project management tools like Microsoft Project are designed for professional project managers and require significant manual effort to maintain dependencies, timelines, and status updates.
+
+### The Solution
+Beads replaces the paid advisor with AI that:
+- **Predicts dependencies** between tasks automatically
+- **Suggests likely outcomes** and identifies blockers
+- **Updates the plan** as circumstances change
+- **Requires minimal user effort**—no project management expertise needed
+
+### Design Principles
+- **Apple-level UX**: Simple, intuitive, delightful to use
+- **AI-first**: Let AI handle the complexity; users focus on decisions
+- **Adaptive**: The plan evolves with new information
+- **Accessible**: Built for people who have never managed a project before
+
+### Target Use Cases
+- Personal finance decisions (pension election, insurance selection)
+- Home projects (selling a house, remodeling, major repairs)
+- Family decisions (school selection, college planning, eldercare)
+- Life transitions (career change, relocation, starting a business)
+
+---
+
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
 ## Quick Reference
