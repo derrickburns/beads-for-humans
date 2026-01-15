@@ -4,10 +4,11 @@ import type { IssueType } from '$lib/types/issue';
 import { chatCompletion } from '$lib/ai/provider';
 
 export const POST: RequestHandler = async ({ request }) => {
-	const { title, type, model } = (await request.json()) as {
+	const { title, type, model, apiKey } = (await request.json()) as {
 		title: string;
 		type: IssueType;
 		model?: string;
+		apiKey?: string;
 	};
 
 	if (!title || title.length < 3) {
@@ -37,7 +38,8 @@ Respond with ONLY the description text, nothing else.`;
 		const result = await chatCompletion({
 			messages: [{ role: 'user', content: prompt }],
 			maxTokens: 300,
-			model
+			model,
+			apiKey
 		});
 
 		if (result.error || !result.content) {

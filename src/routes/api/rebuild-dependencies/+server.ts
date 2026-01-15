@@ -89,9 +89,10 @@ function detectCycles(deps: Map<string, Set<string>>): string[][] {
 }
 
 export const POST: RequestHandler = async ({ request }) => {
-	const { issues, model } = (await request.json()) as {
+	const { issues, model, apiKey } = (await request.json()) as {
 		issues: Issue[];
 		model?: string;
+		apiKey?: string;
 	};
 
 	if (!issues || issues.length === 0) {
@@ -155,7 +156,8 @@ IMPORTANT:
 		const result = await chatCompletion({
 			messages: [{ role: 'user', content: prompt }],
 			maxTokens: 4000,
-			model
+			model,
+			apiKey
 		});
 
 		if (result.error || !result.content) {

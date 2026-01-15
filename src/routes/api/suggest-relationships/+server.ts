@@ -102,11 +102,12 @@ function wouldImprovementCreateCycle(
 }
 
 export const POST: RequestHandler = async ({ request }) => {
-	const { issue, existingIssues, currentIssueId, model } = await request.json() as {
+	const { issue, existingIssues, currentIssueId, model, apiKey } = await request.json() as {
 		issue: { title: string; description: string };
 		existingIssues: Issue[];
 		currentIssueId?: string;
 		model?: string;
+		apiKey?: string;
 	};
 
 	if (!issue || !existingIssues) {
@@ -188,7 +189,8 @@ IMPORTANT RULES:
 		const result = await chatCompletion({
 			messages: [{ role: 'user', content: prompt }],
 			maxTokens: 2048,
-			model
+			model,
+			apiKey
 		});
 
 		if (result.error || !result.content) {

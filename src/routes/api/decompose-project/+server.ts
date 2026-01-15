@@ -37,10 +37,11 @@ interface ProjectPlan {
 }
 
 export const POST: RequestHandler = async ({ request }) => {
-	const { projectGoal, context, model } = (await request.json()) as {
+	const { projectGoal, context, model, apiKey } = (await request.json()) as {
 		projectGoal: string;
 		context?: string; // Additional context user provides
 		model?: string;
+		apiKey?: string;
 	};
 
 	if (!projectGoal || projectGoal.trim().length < 10) {
@@ -118,7 +119,8 @@ Be thorough but practical. Aim for 10-25 tasks for most projects.`;
 				{ role: 'user', content: userMessage }
 			],
 			maxTokens: 4000,
-			model: model || 'anthropic/claude-sonnet-4'
+			model: model || 'anthropic/claude-sonnet-4',
+			apiKey
 		});
 
 		if (result.error || !result.content) {

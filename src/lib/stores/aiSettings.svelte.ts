@@ -29,9 +29,13 @@ export const AVAILABLE_MODELS: AIModel[] = [
 
 export interface AISettings {
 	model: string;
+	apiKey?: string; // Optional client-side API key
 }
 
+export type AIStatus = 'configured' | 'client-key' | 'not-configured';
+
 const STORAGE_KEY = 'ai-settings';
+const API_KEY_STORAGE_KEY = 'openrouter-api-key';
 
 const DEFAULT_SETTINGS: AISettings = {
 	model: 'openai/gpt-4o'
@@ -42,13 +46,16 @@ function loadSettings(): AISettings {
 
 	try {
 		const stored = localStorage.getItem(STORAGE_KEY);
+		const apiKey = localStorage.getItem(API_KEY_STORAGE_KEY) || undefined;
+
 		if (stored) {
 			const parsed = JSON.parse(stored);
 			// Validate the stored model exists
 			if (parsed.model && AVAILABLE_MODELS.some((m) => m.id === parsed.model)) {
-				return parsed;
+				return { ...parsed, apiKey };
 			}
 		}
+		return { ...DEFAULT_SETTINGS, apiKey };
 	} catch {
 		// Ignore parse errors
 	}
@@ -57,11 +64,42 @@ function loadSettings(): AISettings {
 
 function saveSettings(settings: AISettings): void {
 	if (!browser) return;
-	localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+	// Save model settings (without API key - that's stored separately)
+	const { apiKey: _, ...rest } = settings;
+	localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
+}
+
+function saveApiKey(apiKey: string | undefined): void {
+	if (!browser) return;
+	if (apiKey) {
+		localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
+	} else {
+		localStorage.removeItem(API_KEY_STORAGE_KEY);
+	}
 }
 
 function createAISettingsStore() {
 	let settings = $state<AISettings>(loadSettings());
+	let serverConfigured = $state<boolean | null>(null); // null = unknown
+
+	// Check if server has API key configured
+	async function checkServerConfig() {
+		if (!browser) return;
+		try {
+			const response = await fetch('/api/ai-status');
+			if (response.ok) {
+				const data = await response.json();
+				serverConfigured = data.configured;
+			}
+		} catch {
+			serverConfigured = false;
+		}
+	}
+
+	// Initialize server check
+	if (browser) {
+		checkServerConfig();
+	}
 
 	return {
 		get model() {
@@ -69,6 +107,23 @@ function createAISettingsStore() {
 		},
 		get currentModel() {
 			return AVAILABLE_MODELS.find((m) => m.id === settings.model) || AVAILABLE_MODELS[0];
+		},
+		get apiKey() {
+			return settings.apiKey;
+		},
+		get hasApiKey() {
+			return !!settings.apiKey;
+		},
+		get serverConfigured() {
+			return serverConfigured;
+		},
+		get status(): AIStatus {
+			if (serverConfigured) return 'configured';
+			if (settings.apiKey) return 'client-key';
+			return 'not-configured';
+		},
+		get isConfigured() {
+			return serverConfigured || !!settings.apiKey;
 		},
 
 		setModel(modelId: string) {
@@ -79,12 +134,26 @@ function createAISettingsStore() {
 			}
 		},
 
-		// Get settings for API requests
-		getRequestSettings(): { model: string } {
+		setApiKey(apiKey: string | undefined) {
+			settings.apiKey = apiKey?.trim() || undefined;
+			saveApiKey(settings.apiKey);
+		},
+
+		clearApiKey() {
+			settings.apiKey = undefined;
+			saveApiKey(undefined);
+		},
+
+		// Get settings for API requests (includes API key if set)
+		getRequestSettings(): { model: string; apiKey?: string } {
 			return {
-				model: settings.model
+				model: settings.model,
+				apiKey: settings.apiKey
 			};
-		}
+		},
+
+		// Refresh server configuration status
+		refreshServerStatus: checkServerConfig
 	};
 }
 

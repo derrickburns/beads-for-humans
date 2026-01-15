@@ -9,6 +9,7 @@ export interface ChatCompletionOptions {
 	messages: ChatMessage[];
 	maxTokens?: number;
 	model?: string;
+	apiKey?: string; // Client-provided API key (optional)
 }
 
 export interface ChatCompletionResult {
@@ -24,12 +25,13 @@ const DEFAULT_MODEL = 'openai/gpt-4o';
 export async function chatCompletion(
 	options: ChatCompletionOptions
 ): Promise<ChatCompletionResult> {
-	const apiKey = env.OPENROUTER_API_KEY;
+	// Use client-provided API key if available, otherwise fall back to server env
+	const apiKey = options.apiKey || env.OPENROUTER_API_KEY;
 
 	if (!apiKey) {
 		return {
 			content: null,
-			error: 'AI features not configured - set OPENROUTER_API_KEY in .env'
+			error: 'AI not configured. Add your OpenRouter API key in Settings.'
 		};
 	}
 
@@ -43,7 +45,7 @@ export async function chatCompletion(
 				'Content-Type': 'application/json',
 				'Authorization': `Bearer ${apiKey}`,
 				'HTTP-Referer': env.SITE_URL || 'http://localhost:5173',
-				'X-Title': 'Issues Tracker'
+				'X-Title': 'Middle Manager'
 			},
 			body: JSON.stringify({
 				model,
@@ -58,6 +60,13 @@ export async function chatCompletion(
 		if (!response.ok) {
 			const errorText = await response.text();
 			console.error('OpenRouter API error:', errorText);
+			// Provide helpful error messages
+			if (response.status === 401) {
+				return { content: null, error: 'Invalid API key. Please check your OpenRouter API key.' };
+			}
+			if (response.status === 429) {
+				return { content: null, error: 'Rate limit exceeded. Please try again in a moment.' };
+			}
 			return { content: null, error: errorText };
 		}
 
