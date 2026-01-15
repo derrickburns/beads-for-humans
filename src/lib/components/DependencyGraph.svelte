@@ -100,6 +100,54 @@
 		contextMenu = null;
 	}
 
+	// Inline issue creation state
+	let inlineCreate = $state<{ x: number; y: number } | null>(null);
+	let inlineCreateTitle = $state('');
+	let creatingInline = $state(false);
+
+	// Track if we're in panning mode to avoid triggering create
+	let wasPanning = $state(false);
+	let panStartPos = $state<{ x: number; y: number } | null>(null);
+
+	function handleBackgroundDoubleClick(e: MouseEvent) {
+		// Don't create if we were panning
+		if (wasPanning) return;
+
+		// Get click position relative to viewport
+		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		const x = e.clientX;
+		const y = e.clientY;
+
+		// Open inline create form
+		inlineCreate = { x, y };
+		inlineCreateTitle = '';
+	}
+
+	function closeInlineCreate() {
+		inlineCreate = null;
+		inlineCreateTitle = '';
+		creatingInline = false;
+	}
+
+	function createInlineIssue() {
+		if (!inlineCreateTitle.trim()) return;
+
+		creatingInline = true;
+
+		const newIssue = issueStore.create({
+			title: inlineCreateTitle.trim(),
+			description: '',
+			priority: 2,
+			type: 'task'
+		});
+
+		if (newIssue) {
+			focusedIssueId = newIssue.id;
+		}
+
+		closeInlineCreate();
+	}
+
 	// Sync focusedIssueId when focusId prop changes
 	$effect(() => {
 		if (focusId) {
@@ -357,19 +405,36 @@
 		if (e.button === 0) {
 			isPanning = true;
 			lastMousePos = { x: e.clientX, y: e.clientY };
+			panStartPos = { x: e.clientX, y: e.clientY };
+			wasPanning = false;
 		}
 	}
 
 	function handleMouseMove(e: MouseEvent) {
 		if (isPanning) {
-			panX += e.clientX - lastMousePos.x;
-			panY += e.clientY - lastMousePos.y;
+			const dx = e.clientX - lastMousePos.x;
+			const dy = e.clientY - lastMousePos.y;
+			panX += dx;
+			panY += dy;
 			lastMousePos = { x: e.clientX, y: e.clientY };
+
+			// Mark as panning if moved more than 5px
+			if (panStartPos) {
+				const totalMoved = Math.abs(e.clientX - panStartPos.x) + Math.abs(e.clientY - panStartPos.y);
+				if (totalMoved > 5) {
+					wasPanning = true;
+				}
+			}
 		}
 	}
 
 	function handleMouseUp() {
 		isPanning = false;
+		// Reset panning flag after a short delay to allow double-click to check it
+		setTimeout(() => {
+			wasPanning = false;
+			panStartPos = null;
+		}, 100);
 	}
 
 	function resetView() {
@@ -740,6 +805,7 @@
 		onmousemove={handleMouseMove}
 		onmouseup={handleMouseUp}
 		onmouseleave={handleMouseUp}
+		ondblclick={handleBackgroundDoubleClick}
 		role="img"
 		aria-label="Task order graph"
 	>
@@ -1078,7 +1144,7 @@
 
 	<!-- Help text -->
 	<div class="text-center text-sm text-gray-400 pt-2">
-		Click to select · Double-click to edit · Scroll to zoom · Drag to pan · Right-click for menu
+		Click to select · Double-click node to edit · Double-click empty space to create · Scroll to zoom · Drag to pan · Right-click for menu
 		{#if !focusedIssueId}
 			· <span class="text-purple-600">Select an issue to see AI suggestions</span>
 		{/if}
@@ -1093,4 +1159,47 @@
 		y={contextMenu.y}
 		onClose={closeContextMenu}
 	/>
+{/if}
+
+<!-- Inline Create Form -->
+{#if inlineCreate}
+	<div class="fixed inset-0 z-[90]" onclick={closeInlineCreate}></div>
+	<div
+		class="fixed z-[100] bg-white rounded-lg shadow-xl border border-gray-200 p-3 w-72"
+		style="left: {Math.min(inlineCreate.x, window.innerWidth - 300)}px; top: {Math.min(inlineCreate.y, window.innerHeight - 150)}px;"
+		onclick={(e) => e.stopPropagation()}
+	>
+		<div class="flex items-center gap-2 mb-2">
+			<svg class="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+			</svg>
+			<span class="text-sm font-medium text-gray-900">Quick Create</span>
+		</div>
+		<form onsubmit={(e) => { e.preventDefault(); createInlineIssue(); }}>
+			<input
+				type="text"
+				bind:value={inlineCreateTitle}
+				placeholder="What needs to be done?"
+				class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+				autofocus
+			/>
+			<div class="flex items-center justify-between mt-2">
+				<button
+					type="button"
+					onclick={closeInlineCreate}
+					class="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900"
+				>
+					Cancel
+				</button>
+				<button
+					type="submit"
+					disabled={!inlineCreateTitle.trim() || creatingInline}
+					class="px-4 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+				>
+					Create
+				</button>
+			</div>
+		</form>
+		<p class="text-xs text-gray-400 mt-2">Press Enter to create</p>
+	</div>
 {/if}
