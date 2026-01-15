@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { browser } from '$app/environment';
 	import { issueStore } from '$lib/stores/issues.svelte';
 	import { goto } from '$app/navigation';
 	import type { Issue, RelationshipSuggestion, GraphImprovement, ExecutionType } from '$lib/types/issue';
@@ -45,6 +46,40 @@
 	// Filter state
 	let showClosed = $state(false);
 	// focusedIssueId is now a bindable prop
+
+	// Legend and help state
+	const LEGEND_COLLAPSED_KEY = 'graph-legend-collapsed';
+	const FIRST_VISIT_KEY = 'graph-first-visit-seen';
+
+	function getStoredBoolean(key: string, defaultValue: boolean): boolean {
+		if (!browser) return defaultValue;
+		try {
+			const stored = localStorage.getItem(key);
+			return stored !== null ? stored === 'true' : defaultValue;
+		} catch {
+			return defaultValue;
+		}
+	}
+
+	let legendCollapsed = $state(getStoredBoolean(LEGEND_COLLAPSED_KEY, false));
+	let firstVisitSeen = $state(getStoredBoolean(FIRST_VISIT_KEY, false));
+
+	function toggleLegend() {
+		legendCollapsed = !legendCollapsed;
+		if (browser) {
+			localStorage.setItem(LEGEND_COLLAPSED_KEY, String(legendCollapsed));
+		}
+	}
+
+	function dismissFirstVisit() {
+		firstVisitSeen = true;
+		if (browser) {
+			localStorage.setItem(FIRST_VISIT_KEY, 'true');
+		}
+	}
+
+	// Complexity warning threshold
+	const COMPLEXITY_THRESHOLD = 20;
 
 	// AI Suggestions state
 	let suggestions = $state<RelationshipSuggestion[]>([]);
@@ -1206,83 +1241,161 @@
 		{/if}
 	</div>
 
-	<!-- Legend & Actions -->
-	<div class="flex flex-wrap items-center justify-between gap-4">
-		<div class="flex flex-wrap items-center gap-4 text-sm">
-			<!-- Status indicators -->
-			<div class="flex items-center gap-2">
-				<div class="w-3 h-3 rounded-full bg-green-500"></div>
-				<span class="text-gray-600">Can Start</span>
-				<HelpTooltip text="Ready to work on - no blockers" position="bottom" />
+	<!-- First Visit Hint -->
+	{#if !firstVisitSeen && displayedIssues.length > 0}
+		<div class="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg px-4 py-3 flex items-start gap-3">
+			<div class="text-blue-600 mt-0.5">
+				<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+				</svg>
 			</div>
-			<div class="flex items-center gap-2">
-				<div class="w-3 h-3 rounded-full bg-blue-500"></div>
-				<span class="text-gray-600">In Progress</span>
-				<HelpTooltip text="Currently being worked on" position="bottom" />
+			<div class="flex-1">
+				<p class="text-sm font-medium text-gray-900">Welcome to the Graph View!</p>
+				<p class="text-sm text-gray-600 mt-1">
+					<span class="font-medium">Click</span> a task to select it ·
+					<span class="font-medium">Double-click</span> to edit ·
+					<span class="font-medium">Drag the → handle</span> to connect tasks ·
+					<span class="font-medium">Scroll</span> to zoom ·
+					<span class="font-medium">Drag background</span> to pan
+				</p>
 			</div>
-			<div class="flex items-center gap-2">
-				<div class="w-3 h-3 rounded-full bg-amber-500"></div>
-				<span class="text-gray-600">Waiting</span>
-				<HelpTooltip text="Blocked by other tasks that must finish first" position="bottom" />
-			</div>
-			<div class="flex items-center gap-2">
-				<div class="w-3 h-3 rounded-full bg-gray-400"></div>
-				<span class="text-gray-600">Closed</span>
-				<HelpTooltip text="Completed and done" position="bottom" />
-			</div>
-			<div class="h-4 border-l border-gray-300"></div>
-			<!-- Execution type (who does it) -->
-			<div class="flex items-center gap-2">
-				<div class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700 border border-red-300">You</div>
-				<span class="text-gray-600">You do</span>
-				<HelpTooltip text="Only you can do this (physical action, signature, decision)" position="bottom" />
-			</div>
-			<div class="flex items-center gap-2">
-				<div class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-300">AI</div>
-				<span class="text-gray-600">AI does</span>
-				<HelpTooltip text="AI can complete this without your involvement" position="bottom" />
-			</div>
-			<div class="flex items-center gap-2">
-				<div class="px-1 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-300">✓</div>
-				<span class="text-gray-600">Verify</span>
-				<HelpTooltip text="You need to review and approve when this is done" position="bottom" />
-			</div>
-			<div class="h-4 border-l border-gray-300"></div>
-			<div class="flex items-center gap-2">
-				<div class="w-5 h-3.5 rounded bg-amber-600 flex items-center justify-center">
-					<span class="text-[8px] text-white font-bold">CL</span>
-				</div>
-				<span class="text-gray-600">AI Working</span>
-				<HelpTooltip text="An AI model is actively working on this task" position="bottom" />
-			</div>
-			<div class="flex items-center gap-2">
-				<div class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
-				<span class="text-gray-600">Needs Help</span>
-				<HelpTooltip text="AI got stuck or timed out - you need to intervene" position="bottom" />
-			</div>
-			{#if activeSuggestions.length > 0}
-				<div class="flex items-center gap-2">
-					<div class="w-3 h-3 rounded-full bg-purple-600"></div>
-					<span class="text-gray-600">AI Suggested</span>
-					<HelpTooltip text="AI thinks this task should be done before the selected one" position="bottom" />
-				</div>
-			{/if}
-		</div>
-
-		<div class="flex items-center gap-4">
-			<span class="text-sm text-gray-500">
-				{displayedIssues.length} issue{displayedIssues.length !== 1 ? 's' : ''} shown
-			</span>
-			<a
-				href="/issue/new"
-				class="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+			<button
+				onclick={dismissFirstVisit}
+				class="text-gray-400 hover:text-gray-600 p-1"
+				aria-label="Dismiss hint"
 			>
 				<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
 				</svg>
-				New Issue
-			</a>
+			</button>
 		</div>
+	{/if}
+
+	<!-- Complexity Warning -->
+	{#if displayedIssues.length >= COMPLEXITY_THRESHOLD}
+		<div class="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-center gap-3">
+			<svg class="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+			</svg>
+			<p class="text-sm text-amber-800">
+				Your plan has <strong>{displayedIssues.length} tasks</strong> – the List view may be easier to scan.
+			</p>
+		</div>
+	{/if}
+
+	<!-- Legend & Actions -->
+	<div class="space-y-2">
+		<div class="flex items-center justify-between">
+			<button
+				onclick={toggleLegend}
+				class="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+			>
+				<svg
+					class="w-4 h-4 transition-transform {legendCollapsed ? '' : 'rotate-90'}"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+				>
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+				</svg>
+				<span class="font-medium">Legend</span>
+			</button>
+
+			<div class="flex items-center gap-4">
+				<span class="text-sm text-gray-500">
+					{displayedIssues.length} issue{displayedIssues.length !== 1 ? 's' : ''} shown
+				</span>
+				<a
+					href="/issue/new"
+					class="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+				>
+					<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+					</svg>
+					New Issue
+				</a>
+			</div>
+		</div>
+
+		{#if !legendCollapsed}
+			<div class="flex flex-wrap items-center gap-4 text-sm pl-6 pb-2 transition-all">
+				<!-- Status indicators -->
+				<div class="flex items-center gap-2">
+					<div class="w-3 h-3 rounded-full bg-green-500"></div>
+					<span class="text-gray-600">Can Start</span>
+					<HelpTooltip text="Ready to work on - no blockers" position="bottom" />
+				</div>
+				<div class="flex items-center gap-2">
+					<div class="w-3 h-3 rounded-full bg-blue-500"></div>
+					<span class="text-gray-600">In Progress</span>
+					<HelpTooltip text="Currently being worked on" position="bottom" />
+				</div>
+				<div class="flex items-center gap-2">
+					<div class="w-3 h-3 rounded-full bg-amber-500"></div>
+					<span class="text-gray-600">Waiting</span>
+					<HelpTooltip text="Blocked by other tasks that must finish first" position="bottom" />
+				</div>
+				<div class="flex items-center gap-2">
+					<div class="w-3 h-3 rounded-full bg-gray-400"></div>
+					<span class="text-gray-600">Closed</span>
+					<HelpTooltip text="Completed and done" position="bottom" />
+				</div>
+				<div class="h-4 border-l border-gray-300"></div>
+				<!-- Execution type (who does it) -->
+				<div class="flex items-center gap-2">
+					<div class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700 border border-red-300">You</div>
+					<span class="text-gray-600">You do</span>
+					<HelpTooltip text="Only you can do this (physical action, signature, decision)" position="bottom" />
+				</div>
+				<div class="flex items-center gap-2">
+					<div class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-300">AI</div>
+					<span class="text-gray-600">AI does</span>
+					<HelpTooltip text="AI can complete this without your involvement" position="bottom" />
+				</div>
+				<div class="flex items-center gap-2">
+					<div class="px-1 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-300">✓</div>
+					<span class="text-gray-600">Verify</span>
+					<HelpTooltip text="You need to review and approve when this is done" position="bottom" />
+				</div>
+				<div class="h-4 border-l border-gray-300"></div>
+				<!-- Connection & edge help -->
+				<div class="flex items-center gap-2">
+					<div class="w-5 h-3 rounded bg-gray-200 flex items-center justify-center">
+						<span class="text-[8px] text-gray-600">→</span>
+					</div>
+					<span class="text-gray-600">Connect</span>
+					<HelpTooltip text="Drag this handle to create a 'must finish first' connection" position="bottom" />
+				</div>
+				<div class="flex items-center gap-2">
+					<svg class="w-6 h-3" viewBox="0 0 24 12">
+						<line x1="0" y1="6" x2="24" y2="6" stroke="#9ca3af" stroke-width="2" />
+						<polygon points="20,3 24,6 20,9" fill="#9ca3af" />
+					</svg>
+					<span class="text-gray-600">Must finish first</span>
+					<HelpTooltip text="Arrow points from blocker to blocked task" position="bottom" />
+				</div>
+				<div class="h-4 border-l border-gray-300"></div>
+				<div class="flex items-center gap-2">
+					<div class="w-5 h-3.5 rounded bg-amber-600 flex items-center justify-center">
+						<span class="text-[8px] text-white font-bold">CL</span>
+					</div>
+					<span class="text-gray-600">AI Working</span>
+					<HelpTooltip text="An AI model is actively working on this task" position="bottom" />
+				</div>
+				<div class="flex items-center gap-2">
+					<div class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
+					<span class="text-gray-600">Needs Help</span>
+					<HelpTooltip text="AI got stuck or timed out - you need to intervene" position="bottom" />
+				</div>
+				{#if activeSuggestions.length > 0}
+					<div class="flex items-center gap-2">
+						<div class="w-3 h-3 rounded-full bg-purple-600"></div>
+						<span class="text-gray-600">AI Suggested</span>
+						<HelpTooltip text="AI thinks this task should be done before the selected one" position="bottom" />
+					</div>
+				{/if}
+			</div>
+		{/if}
 	</div>
 
 	<!-- Help text -->
