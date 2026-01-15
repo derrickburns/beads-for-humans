@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { Issue } from '$lib/types/issue';
-	import { PRIORITY_LABELS, TYPE_LABELS } from '$lib/types/issue';
+	import type { Issue, ExecutionType } from '$lib/types/issue';
+	import { PRIORITY_LABELS, TYPE_LABELS, EXECUTION_TYPE_LABELS } from '$lib/types/issue';
 	import { issueStore } from '$lib/stores/issues.svelte';
 
 	let { issue }: { issue: Issue } = $props();
@@ -25,6 +25,22 @@
 		closed: 'bg-gray-400'
 	};
 
+	// Execution type styling - who does this task?
+	const executionColors: Record<ExecutionType, string> = {
+		automated: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+		human: 'bg-rose-100 text-rose-800 border-rose-200',
+		ai_assisted: 'bg-sky-100 text-sky-800 border-sky-200',
+		human_assisted: 'bg-violet-100 text-violet-800 border-violet-200'
+	};
+
+	// Short labels for the badge
+	const executionShortLabels: Record<ExecutionType, string> = {
+		automated: 'AI',
+		human: 'You',
+		ai_assisted: 'AI+You',
+		human_assisted: 'You+AI'
+	};
+
 	let blockers = $derived(issueStore.getBlockers(issue.id));
 	let isBlocked = $derived(blockers.length > 0);
 </script>
@@ -39,13 +55,26 @@
 		</div>
 
 		<div class="flex-1 min-w-0">
-			<div class="flex items-center gap-2 mb-1">
+			<div class="flex items-center gap-2 mb-1 flex-wrap">
 				<span class="text-xs font-medium px-2 py-0.5 rounded-full border {typeColors[issue.type]}">
 					{TYPE_LABELS[issue.type]}
 				</span>
 				<span class="text-xs font-medium px-2 py-0.5 rounded-full {priorityColors[issue.priority]}">
 					P{issue.priority}
 				</span>
+				{#if issue.executionType}
+					<span
+						class="text-xs font-medium px-2 py-0.5 rounded-full border {executionColors[issue.executionType]}"
+						title={EXECUTION_TYPE_LABELS[issue.executionType]}
+					>
+						{executionShortLabels[issue.executionType]}
+					</span>
+				{/if}
+				{#if issue.validationRequired}
+					<span class="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200" title="You need to verify this when done">
+						✓ Verify
+					</span>
+				{/if}
 				{#if isBlocked}
 					<span class="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
 						Waiting

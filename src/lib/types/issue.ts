@@ -3,6 +3,13 @@ export type IssuePriority = 0 | 1 | 2 | 3 | 4;
 export type IssueType = 'task' | 'bug' | 'feature';
 export type NeedsHumanTrigger = 'ai_blocked' | 'timeout' | 'user_flagged';
 
+// Execution type: who does this task?
+export type ExecutionType =
+	| 'automated'      // AI can complete without human involvement
+	| 'human'          // Only a human can do this (legal, physical, etc.)
+	| 'ai_assisted'    // AI does the work, human validates
+	| 'human_assisted'; // Human does the work with AI guidance
+
 // AI assignment tracking
 export interface AIAssignment {
 	modelId: string;        // e.g., "anthropic/claude-sonnet-4"
@@ -31,6 +38,11 @@ export interface Issue {
 	dependencies: string[]; // IDs of issues this depends on
 	aiAssignment?: AIAssignment;
 	needsHuman?: NeedsHumanReason;
+	// Execution type classification
+	executionType?: ExecutionType;           // Who does this task?
+	aiConfidence?: number;                   // 0-1, how confident AI is it can help
+	validationRequired?: boolean;            // Does this need human sign-off?
+	executionReason?: string;                // Why this execution type was chosen
 }
 
 export interface RelationshipSuggestion {
@@ -85,4 +97,18 @@ export const TYPE_LABELS: Record<IssueType, string> = {
 	task: 'Task',
 	bug: 'Bug',
 	feature: 'Feature'
+};
+
+export const EXECUTION_TYPE_LABELS: Record<ExecutionType, string> = {
+	automated: 'AI Can Do This',
+	human: 'You Must Do This',
+	ai_assisted: 'AI Does, You Verify',
+	human_assisted: 'You Do, AI Helps'
+};
+
+export const EXECUTION_TYPE_DESCRIPTIONS: Record<ExecutionType, string> = {
+	automated: 'The AI can complete this task without your involvement',
+	human: 'Only you can do this (physical action, legal signature, decision)',
+	ai_assisted: 'AI will do the work, but you should check the result',
+	human_assisted: 'You do the work, AI provides guidance and answers'
 };

@@ -482,8 +482,8 @@
 									<!-- Add Prerequisite -->
 									<div>
 										<h4 class="text-sm font-medium text-gray-700 mb-2">Add Prerequisite</h4>
+										{#if getAvailableDeps(selectedIssue).length > 0}
 										{@const available = getAvailableDeps(selectedIssue)}
-										{#if available.length > 0}
 											<div class="max-h-48 overflow-y-auto border border-gray-200 rounded">
 												{#each available as issue}
 													<button

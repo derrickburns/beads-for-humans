@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { Issue, IssuePriority, IssueType, IssueStatus, RelationshipSuggestion } from '$lib/types/issue';
-	import { PRIORITY_LABELS, TYPE_LABELS, STATUS_LABELS } from '$lib/types/issue';
+	import type { Issue, IssuePriority, IssueType, IssueStatus, ExecutionType, RelationshipSuggestion } from '$lib/types/issue';
+	import { PRIORITY_LABELS, TYPE_LABELS, STATUS_LABELS, EXECUTION_TYPE_LABELS, EXECUTION_TYPE_DESCRIPTIONS } from '$lib/types/issue';
 	import { issueStore } from '$lib/stores/issues.svelte';
 	import { suggestRelationships } from '$lib/ai/relationships';
 	import RelationshipSuggestionComponent from './RelationshipSuggestion.svelte';
@@ -20,6 +20,8 @@
 	let type = $state<IssueType>(issue?.type ?? 'task');
 	let status = $state<IssueStatus>(issue?.status ?? 'open');
 	let dependencies = $state<string[]>(issue?.dependencies ?? []);
+	let executionType = $state<ExecutionType | undefined>(issue?.executionType);
+	let validationRequired = $state(issue?.validationRequired ?? false);
 
 	// AI suggestions state
 	let suggestions = $state<RelationshipSuggestion[]>([]);
@@ -93,7 +95,9 @@
 				priority,
 				type,
 				status,
-				dependencies
+				dependencies,
+				executionType,
+				validationRequired
 			});
 		} else {
 			savedIssue = issueStore.create({
@@ -101,7 +105,9 @@
 				description: description.trim(),
 				priority,
 				type,
-				dependencies
+				dependencies,
+				executionType,
+				validationRequired
 			});
 		}
 
@@ -252,6 +258,51 @@
 				{/each}
 			</select>
 		</div>
+	</div>
+
+	<!-- Who Does This Task -->
+	<div>
+		<span class="block text-sm font-medium text-gray-700 mb-2">Who Does This?</span>
+		<p class="text-sm text-gray-500 mb-3">
+			Identify whether you need to do this yourself, or if AI can help.
+		</p>
+		<div class="grid grid-cols-2 gap-3">
+			{#each Object.entries(EXECUTION_TYPE_LABELS) as [value, label]}
+				<label
+					class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors {executionType === value
+						? 'bg-blue-50 border-blue-300'
+						: 'bg-white border-gray-200 hover:border-gray-300'}"
+				>
+					<input
+						type="radio"
+						name="executionType"
+						{value}
+						checked={executionType === value}
+						onchange={() => { executionType = value as ExecutionType; }}
+						class="mt-0.5 w-4 h-4 text-blue-600 focus:ring-blue-500"
+					/>
+					<div class="flex-1">
+						<div class="font-medium text-gray-900 text-sm">{label}</div>
+						<div class="text-xs text-gray-500 mt-0.5">{EXECUTION_TYPE_DESCRIPTIONS[value as ExecutionType]}</div>
+					</div>
+				</label>
+			{/each}
+		</div>
+
+		<!-- Validation checkbox -->
+		{#if executionType && executionType !== 'human'}
+			<label class="flex items-center gap-3 mt-3 p-3 rounded-lg border cursor-pointer transition-colors {validationRequired ? 'bg-amber-50 border-amber-300' : 'bg-white border-gray-200 hover:border-gray-300'}">
+				<input
+					type="checkbox"
+					bind:checked={validationRequired}
+					class="w-4 h-4 text-amber-600 rounded focus:ring-amber-500"
+				/>
+				<div>
+					<div class="font-medium text-gray-900 text-sm">Requires your verification</div>
+					<div class="text-xs text-gray-500">You need to review and approve when this is done</div>
+				</div>
+			</label>
+		{/if}
 	</div>
 
 	<!-- Status (only for editing) -->

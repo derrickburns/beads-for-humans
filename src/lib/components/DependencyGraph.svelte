@@ -1,8 +1,16 @@
 <script lang="ts">
 	import { issueStore } from '$lib/stores/issues.svelte';
 	import { goto } from '$app/navigation';
-	import type { Issue, RelationshipSuggestion, GraphImprovement } from '$lib/types/issue';
+	import type { Issue, RelationshipSuggestion, GraphImprovement, ExecutionType } from '$lib/types/issue';
 	import { getModelAbbrev, getModelColor } from '$lib/types/graphChat';
+
+	// Execution type visual config
+	const executionTypeConfig: Record<ExecutionType, { color: string; bgColor: string; icon: string; label: string }> = {
+		automated: { color: '#059669', bgColor: '#d1fae5', icon: '⚡', label: 'AI' },
+		human: { color: '#dc2626', bgColor: '#fee2e2', icon: '👤', label: 'You' },
+		ai_assisted: { color: '#0284c7', bgColor: '#e0f2fe', icon: '🤝', label: 'AI+✓' },
+		human_assisted: { color: '#7c3aed', bgColor: '#ede9fe', icon: '💡', label: 'You+AI' }
+	};
 
 	// Props
 	interface Props {
@@ -902,6 +910,23 @@
 							P{pos.issue.priority} · {pos.issue.status.replace('_', ' ')}
 						</text>
 
+						<!-- Execution Type badge (bottom-left, shows who does this task) -->
+						{#if pos.issue.executionType}
+							{@const execConfig = executionTypeConfig[pos.issue.executionType]}
+							<g transform="translate(8, {pos.height - 24})">
+								<rect x="0" y="0" width="48" height="18" rx="9" fill={execConfig.bgColor} stroke={execConfig.color} stroke-width="1" />
+								<text x="24" y="13" font-size="10" fill={execConfig.color} text-anchor="middle" font-weight="600">
+									{execConfig.label}
+								</text>
+							</g>
+							{#if pos.issue.validationRequired}
+								<g transform="translate(60, {pos.height - 24})">
+									<rect x="0" y="0" width="20" height="18" rx="9" fill="#fef3c7" stroke="#f59e0b" stroke-width="1" />
+									<text x="10" y="13" font-size="10" fill="#d97706" text-anchor="middle" font-weight="bold">✓</text>
+								</g>
+							{/if}
+						{/if}
+
 						<!-- Description (truncated, wrapped - up to 6 lines) -->
 						{#if pos.issue.description}
 							{@const desc = pos.issue.description.replace(/\n/g, ' ').trim()}
@@ -959,6 +984,7 @@
 	<!-- Legend & Actions -->
 	<div class="flex flex-wrap items-center justify-between gap-4">
 		<div class="flex flex-wrap items-center gap-4 text-sm">
+			<!-- Status indicators -->
 			<div class="flex items-center gap-2">
 				<div class="w-3 h-3 rounded-full bg-green-500"></div>
 				<span class="text-gray-600">Can Start</span>
@@ -976,6 +1002,20 @@
 				<span class="text-gray-600">Closed</span>
 			</div>
 			<div class="h-4 border-l border-gray-300"></div>
+			<!-- Execution type (who does it) -->
+			<div class="flex items-center gap-2">
+				<div class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700 border border-red-300">You</div>
+				<span class="text-gray-600">You do</span>
+			</div>
+			<div class="flex items-center gap-2">
+				<div class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-300">AI</div>
+				<span class="text-gray-600">AI does</span>
+			</div>
+			<div class="flex items-center gap-2">
+				<div class="px-1 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-300">✓</div>
+				<span class="text-gray-600">Verify</span>
+			</div>
+			<div class="h-4 border-l border-gray-300"></div>
 			<div class="flex items-center gap-2">
 				<div class="w-5 h-3.5 rounded bg-amber-600 flex items-center justify-center">
 					<span class="text-[8px] text-white font-bold">CL</span>
@@ -984,7 +1024,7 @@
 			</div>
 			<div class="flex items-center gap-2">
 				<div class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
-				<span class="text-gray-600">Needs Human</span>
+				<span class="text-gray-600">Needs Help</span>
 			</div>
 			{#if activeSuggestions.length > 0}
 				<div class="flex items-center gap-2">

@@ -4,6 +4,7 @@ import type {
 	IssueStatus,
 	IssuePriority,
 	IssueType,
+	ExecutionType,
 	AIAssignment,
 	NeedsHumanTrigger
 } from '$lib/types/issue';
@@ -86,6 +87,10 @@ class IssueStore {
 		priority: IssuePriority;
 		type: IssueType;
 		dependencies?: string[];
+		executionType?: ExecutionType;
+		validationRequired?: boolean;
+		aiConfidence?: number;
+		executionReason?: string;
 	}): Issue {
 		const now = new Date().toISOString();
 		const issue: Issue = {
@@ -97,7 +102,11 @@ class IssueStore {
 			type: data.type,
 			createdAt: now,
 			updatedAt: now,
-			dependencies: data.dependencies ?? []
+			dependencies: data.dependencies ?? [],
+			executionType: data.executionType,
+			validationRequired: data.validationRequired,
+			aiConfidence: data.aiConfidence,
+			executionReason: data.executionReason
 		};
 		this.issues = [...this.issues, issue];
 		saveIssues(this.issues);
