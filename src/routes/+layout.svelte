@@ -38,7 +38,7 @@
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
-	<title>Issues</title>
+	<title>Middle Manager</title>
 </svelte:head>
 
 <div class="min-h-screen">
@@ -46,7 +46,7 @@
 		<div class="max-w-6xl mx-auto px-6 py-4">
 			<nav class="flex items-center justify-between">
 				<a href="/" class="text-xl font-semibold text-gray-900 hover:text-gray-600 transition-colors">
-					Issues
+					Middle Manager
 				</a>
 				<div class="flex items-center gap-3">
 					<AISettings />

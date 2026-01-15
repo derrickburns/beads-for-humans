@@ -2,7 +2,7 @@
 
 ## Product Vision
 
-**Beads** is an AI-powered project planning tool for non-experts tackling life's major projects.
+**Middle Manager** is an AI-powered project planning tool for non-experts tackling life's major projects.
 
 ### The Problem
 Most people encounter complex, high-stakes projects only once or twice in their lifetimes—electing a pension plan, preparing a house for sale, remodeling a kitchen, choosing a high school or college for a child. They lack expertise and often rely on expensive paid advisors or general contractors.
@@ -10,7 +10,7 @@ Most people encounter complex, high-stakes projects only once or twice in their 
 Traditional project management tools like Microsoft Project are designed for professional project managers and require significant manual effort to maintain dependencies, timelines, and status updates.
 
 ### The Solution
-Beads replaces the paid advisor with AI that:
+Middle Manager replaces the paid advisor with AI that:
 - **Predicts dependencies** between tasks automatically
 - **Suggests likely outcomes** and identifies blockers
 - **Updates the plan** as circumstances change

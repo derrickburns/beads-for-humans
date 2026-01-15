@@ -1,38 +1,41 @@
-# sv
+# Middle Manager
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+**AI-powered project planning for life's major projects.**
 
-## Creating a project
+Middle Manager helps non-experts tackle complex, high-stakes projects they encounter only once or twice in their lifetimes—electing a pension plan, preparing a house for sale, remodeling a kitchen, choosing a school for a child.
 
-If you're seeing this, you've probably already done this step. Congrats!
+## Features
 
-```sh
-# create a new project in the current directory
-npx sv create
+- **AI-predicted dependencies** — Automatically determines what needs to happen first
+- **Visual dependency graph** — See your entire project at a glance
+- **Conversational planning** — Describe your project in natural language
+- **Adaptive updates** — The plan evolves as circumstances change
 
-# create a new project in my-app
-npx sv create my-app
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+## Getting Started
 
 ```sh
+# Install dependencies
+npm install
+
+# Start development server
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
-## Building
+## Tech Stack
 
-To create a production version of your app:
+- SvelteKit 5 with Svelte 5 runes
+- Tailwind CSS 4
+- OpenRouter AI API
+- Local-first (localStorage persistence)
 
-```sh
-npm run build
+## Configuration
+
+Set your OpenRouter API key in `.env`:
+
+```
+OPENROUTER_API_KEY=your-key-here
 ```
 
-You can preview the production build with `npm run preview`.
+## License
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+Private
