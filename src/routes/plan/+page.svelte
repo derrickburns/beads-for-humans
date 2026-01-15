@@ -554,6 +554,39 @@
 					</div>
 				</div>
 
+				<!-- Validation Checkpoints -->
+				{#if projectPlan.validationCheckpoints && projectPlan.validationCheckpoints.length > 0}
+					{@const checkpointTasks = projectPlan.tasks.filter(t => projectPlan.validationCheckpoints.includes(t.id))}
+					{#if checkpointTasks.length > 0}
+						<div class="p-4 bg-purple-50 border border-purple-200 rounded-xl">
+							<div class="flex items-center gap-2 mb-3">
+								<svg class="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+								</svg>
+								<h3 class="font-medium text-purple-900">Validation Checkpoints</h3>
+							</div>
+							<p class="text-sm text-purple-700 mb-3">
+								These are critical milestones where you should stop and verify everything is on track before continuing.
+							</p>
+							<div class="space-y-2">
+								{#each checkpointTasks as task, i}
+									<div class="flex items-center gap-3 p-2 bg-white/60 rounded-lg">
+										<span class="flex-shrink-0 w-6 h-6 bg-purple-600 text-white text-xs font-bold rounded-full flex items-center justify-center">
+											{i + 1}
+										</span>
+										<div class="flex-1">
+											<span class="font-medium text-purple-900">{task.title}</span>
+											{#if task.expertNeeded}
+												<span class="ml-2 text-xs text-purple-600">({task.expertNeeded} review)</span>
+											{/if}
+										</div>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+				{/if}
+
 				<!-- Questions for User -->
 				{#if projectPlan.questionsForUser && projectPlan.questionsForUser.length > 0}
 					<div class="p-4 bg-amber-50 border border-amber-200 rounded-xl">

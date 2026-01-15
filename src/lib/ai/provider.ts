@@ -10,6 +10,8 @@ export interface ChatCompletionOptions {
 	maxTokens?: number;
 	model?: string;
 	apiKey?: string; // Client-provided API key (optional)
+	extendedThinking?: boolean; // Enable extended thinking for Claude models
+	thinkingBudget?: number; // Max tokens for thinking (default 10000)
 }
 
 export interface ChatCompletionResult {
@@ -38,6 +40,30 @@ export async function chatCompletion(
 	const model = options.model || DEFAULT_MODEL;
 	const maxTokens = options.maxTokens || 1024;
 
+	// Check if model supports extended thinking (Claude models)
+	const supportsExtendedThinking = model.includes('claude') &&
+		(model.includes('sonnet') || model.includes('opus'));
+
+	// Build request body
+	const requestBody: Record<string, unknown> = {
+		model,
+		max_tokens: maxTokens,
+		messages: options.messages.map((m) => ({
+			role: m.role,
+			content: m.content
+		}))
+	};
+
+	// Add extended thinking for supported models when requested
+	if (options.extendedThinking && supportsExtendedThinking) {
+		requestBody.thinking = {
+			type: 'enabled',
+			budget_tokens: options.thinkingBudget || 10000
+		};
+		// Increase max_tokens to accommodate thinking + response
+		requestBody.max_tokens = Math.max(maxTokens, 16000);
+	}
+
 	try {
 		const response = await fetch(OPENROUTER_API_URL, {
 			method: 'POST',
@@ -47,14 +73,7 @@ export async function chatCompletion(
 				'HTTP-Referer': env.SITE_URL || 'http://localhost:5173',
 				'X-Title': 'Middle Manager'
 			},
-			body: JSON.stringify({
-				model,
-				max_tokens: maxTokens,
-				messages: options.messages.map((m) => ({
-					role: m.role,
-					content: m.content
-				}))
-			})
+			body: JSON.stringify(requestBody)
 		});
 
 		if (!response.ok) {

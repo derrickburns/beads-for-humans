@@ -113,14 +113,20 @@ Be thorough but practical. Aim for 10-25 tasks for most projects.`;
 		: `Project: ${projectGoal}`;
 
 	try {
+		// Use a capable model for planning with extended thinking enabled
+		const planningModel = model || 'anthropic/claude-sonnet-4';
+
 		const result = await chatCompletion({
 			messages: [
 				{ role: 'system', content: systemPrompt },
 				{ role: 'user', content: userMessage }
 			],
 			maxTokens: 4000,
-			model: model || 'anthropic/claude-sonnet-4',
-			apiKey
+			model: planningModel,
+			apiKey,
+			// Enable extended thinking for Claude models - helps with complex multi-step planning
+			extendedThinking: true,
+			thinkingBudget: 8000
 		});
 
 		if (result.error || !result.content) {

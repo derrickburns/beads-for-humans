@@ -92,7 +92,8 @@
 		if (issues.length === 0) {
 			tips.push({
 				id: 'no-tasks',
-				message: "Start by adding what you need to get done. Don't worry about the order yet - AI can help with that later.",
+				message: "Ready to plan a project? Let AI help you break it down into clear steps, or just add tasks manually.",
+				action: { label: "Plan a Project", href: "/plan" },
 				priority: 0
 			});
 		}
