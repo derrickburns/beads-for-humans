@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { aiSettings, AVAILABLE_MODELS } from '$lib/stores/aiSettings.svelte';
+	import { toFriendlyError, type FriendlyError } from '$lib/utils/errors';
 
 	let isOpen = $state(false);
 	let showSetup = $state(false);
 	let apiKeyInput = $state('');
 	let testingKey = $state(false);
-	let testError = $state<string | null>(null);
+	let testError = $state<FriendlyError | null>(null);
 	let testSuccess = $state(false);
 
 	// Group models by provider for better UX
@@ -41,7 +42,7 @@
 
 	async function testAndSaveKey() {
 		if (!apiKeyInput.trim()) {
-			testError = 'Please enter an API key';
+			testError = { message: 'Please enter an API key', canRetry: false };
 			return;
 		}
 
@@ -64,7 +65,7 @@
 			const data = await response.json();
 
 			if (data.error) {
-				testError = data.error;
+				testError = toFriendlyError(data.error);
 			} else {
 				// Key works! Save it
 				aiSettings.setApiKey(apiKeyInput.trim());
@@ -73,8 +74,8 @@
 					closeSetup();
 				}, 1500);
 			}
-		} catch {
-			testError = 'Failed to test API key. Please try again.';
+		} catch (e) {
+			testError = toFriendlyError(e);
 		} finally {
 			testingKey = false;
 		}
@@ -261,7 +262,18 @@
 					<!-- Error/Success Messages -->
 					{#if testError}
 						<div class="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-800">
-							{testError}
+							<p class="font-medium">{testError.message}</p>
+							{#if testError.suggestion}
+								<p class="text-red-600 mt-1">{testError.suggestion}</p>
+							{/if}
+							{#if testError.canRetry}
+								<button
+									onclick={testAndSaveKey}
+									class="mt-2 text-red-700 underline hover:no-underline text-xs"
+								>
+									Try again
+								</button>
+							{/if}
 						</div>
 					{/if}
 

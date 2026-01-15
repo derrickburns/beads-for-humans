@@ -2,6 +2,7 @@
 	import { issueStore } from '$lib/stores/issues.svelte';
 	import { aiSettings } from '$lib/stores/aiSettings.svelte';
 	import type { Issue, IssueType, IssuePriority } from '$lib/types/issue';
+	import { toFriendlyError, type FriendlyError } from '$lib/utils/errors';
 	import FollowUpSuggestions from './FollowUpSuggestions.svelte';
 
 	let quickInput = $state('');
@@ -12,7 +13,7 @@
 		type: IssueType;
 		priority: IssuePriority;
 	} | null>(null);
-	let error = $state<string | null>(null);
+	let error = $state<FriendlyError | null>(null);
 	let createdIssue = $state<Issue | null>(null);
 
 	async function expandAndCreate() {
@@ -37,13 +38,13 @@
 			const data = await response.json();
 
 			if (data.error) {
-				error = data.error;
+				error = toFriendlyError(data.error);
 				return;
 			}
 
 			expandedResult = data;
-		} catch {
-			error = 'Failed to expand. Try again or create manually.';
+		} catch (e) {
+			error = toFriendlyError(e);
 		} finally {
 			isExpanding = false;
 		}
@@ -158,7 +159,17 @@
 		{/if}
 
 		{#if error}
-			<p class="mt-2 text-sm text-red-600">{error}</p>
+			<div class="mt-2 flex items-center gap-2 text-sm text-red-600">
+				<span>{error.message}{error.suggestion ? `. ${error.suggestion}` : ''}</span>
+				{#if error.canRetry}
+					<button
+						onclick={expandAndCreate}
+						class="text-red-700 underline hover:no-underline"
+					>
+						Try again
+					</button>
+				{/if}
+			</div>
 		{/if}
 
 		<p class="mt-2 text-xs text-gray-500">
