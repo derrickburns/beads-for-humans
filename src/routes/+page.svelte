@@ -10,6 +10,7 @@
 	import DependencyManager from '$lib/components/DependencyManager.svelte';
 	import QuickCreate from '$lib/components/QuickCreate.svelte';
 	import WhatNext from '$lib/components/WhatNext.svelte';
+	import HumanTaskNotifier from '$lib/components/HumanTaskNotifier.svelte';
 	import BenchmarkSuggestions from '$lib/components/BenchmarkSuggestions.svelte';
 	import ValidationCheckpoints from '$lib/components/ValidationCheckpoints.svelte';
 	import { graphChatStore } from '$lib/stores/graphChat.svelte';
@@ -217,6 +218,9 @@
 
 	<!-- Graph Health Warnings -->
 	<GraphHealth />
+
+	<!-- Human Task Notifications -->
+	<HumanTaskNotifier />
 
 	<!-- Contextual Guidance -->
 	<WhatNext />

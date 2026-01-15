@@ -714,6 +714,100 @@ class IssueStore {
 		return best;
 	}
 
+	// ===== Dependency-Weighted Priority Scheduling =====
+
+	// Calculate the "unblock score" - how many tasks become ready when this task completes
+	getUnblockScore(issueId: string): number {
+		// Find tasks that directly depend on this issue
+		const directDependents = this.issues.filter(
+			i => i.dependencies.includes(issueId) && i.status !== 'closed'
+		);
+
+		let unblockCount = 0;
+		for (const dep of directDependents) {
+			// Check if completing issueId would make this dependent ready
+			// (i.e., all OTHER dependencies are already closed)
+			const otherBlockers = dep.dependencies.filter(d => d !== issueId);
+			const allOthersClosed = otherBlockers.every(blockerId => {
+				const blocker = this.getById(blockerId);
+				return blocker?.status === 'closed';
+			});
+			if (allOthersClosed) {
+				unblockCount++;
+			}
+		}
+		return unblockCount;
+	}
+
+	// Get transitive unblock score (how many tasks eventually become unblocked)
+	getTransitiveUnblockScore(issueId: string): number {
+		const dependents = this.getTransitiveDependents(issueId);
+		// Weight by priority: P0 tasks count more
+		const priorityWeights = [5, 4, 3, 2, 1];
+		return dependents.reduce((sum, issue) => {
+			return sum + priorityWeights[issue.priority];
+		}, 0);
+	}
+
+	// Get prioritized ready tasks using dependency-weighted scheduling
+	// Factors: 1) Unblocks most tasks, 2) Highest priority, 3) Execution type preference
+	getPrioritizedReady(): Array<{ issue: Issue; score: number; reasons: string[] }> {
+		const readyIssues = this.ready;
+
+		return readyIssues.map(issue => {
+			const reasons: string[] = [];
+			let score = 0;
+
+			// Factor 1: Unblock score (most important - multiply by 10)
+			const unblockScore = this.getUnblockScore(issue.id);
+			const transitiveScore = this.getTransitiveUnblockScore(issue.id);
+			score += unblockScore * 10;
+			score += transitiveScore * 2;
+			if (unblockScore > 0) {
+				reasons.push(`Unblocks ${unblockScore} task${unblockScore > 1 ? 's' : ''}`);
+			}
+			if (transitiveScore > 5) {
+				reasons.push(`High downstream impact`);
+			}
+
+			// Factor 2: Priority (P0 = 20 points, P4 = 0 points)
+			const priorityScore = (4 - issue.priority) * 5;
+			score += priorityScore;
+			if (issue.priority <= 1) {
+				reasons.push(`High priority (P${issue.priority})`);
+			}
+
+			// Factor 3: Execution type (AI-executable gets slight boost for automation)
+			if (issue.executionType === 'automated' || issue.executionType === 'ai_assisted') {
+				score += 2;
+				reasons.push('Can be AI-assisted');
+			}
+
+			// Factor 4: Human-required tasks that have been waiting
+			if (issue.executionType === 'human') {
+				const age = Date.now() - new Date(issue.createdAt).getTime();
+				const daysSinceCreated = age / (1000 * 60 * 60 * 24);
+				if (daysSinceCreated > 3) {
+					score += 3;
+					reasons.push('Needs human attention');
+				}
+			}
+
+			return { issue, score, reasons };
+		}).sort((a, b) => b.score - a.score);
+	}
+
+	// Get the single best next task to work on
+	getNextTask(): { issue: Issue; score: number; reasons: string[] } | null {
+		const prioritized = this.getPrioritizedReady();
+		return prioritized.length > 0 ? prioritized[0] : null;
+	}
+
+	// Get ready human-required tasks (for notifications)
+	get readyHumanTasks(): Issue[] {
+		return this.ready.filter(i => i.executionType === 'human');
+	}
+
 	// Check for AI timeouts and return issues that should be flagged
 	checkAITimeouts(timeoutMinutes: number = 15): Issue[] {
 		const now = Date.now();

@@ -69,14 +69,19 @@
 			});
 		}
 
-		// Ready issues available
-		if (readyIssues.length > 0 && blockedIssues.length > 0) {
-			const readyTitles = readyIssues.slice(0, 2).map(i => `"${i.title.slice(0, 30)}${i.title.length > 30 ? '...' : ''}"`).join(' or ');
-			tips.push({
-				id: 'ready-work',
-				message: `You can start on ${readyTitles} right now - nothing blocking them!`,
-				priority: 4
-			});
+		// Ready issues available - use dependency-weighted priority
+		if (readyIssues.length > 0) {
+			const nextTask = issueStore.getNextTask();
+			if (nextTask) {
+				const title = nextTask.issue.title.slice(0, 40) + (nextTask.issue.title.length > 40 ? '...' : '');
+				const reason = nextTask.reasons.length > 0 ? nextTask.reasons[0] : 'Ready to start';
+				tips.push({
+					id: 'best-next-task',
+					message: `Best next task: "${title}" — ${reason}`,
+					action: { label: "View Task", href: `/issue/${nextTask.issue.id}` },
+					priority: 1
+				});
+			}
 		}
 
 		// Everything blocked
