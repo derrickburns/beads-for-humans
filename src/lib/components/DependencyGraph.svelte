@@ -3,6 +3,7 @@
 	import { issueStore } from '$lib/stores/issues.svelte';
 	import { goto } from '$app/navigation';
 	import type { Issue, RelationshipSuggestion, GraphImprovement, ExecutionType } from '$lib/types/issue';
+	import { EXECUTION_TYPE_LABELS, STATUS_LABELS, PRIORITY_LABELS } from '$lib/types/issue';
 	import { getModelAbbrev, getModelColor } from '$lib/types/graphChat';
 	import HelpTooltip from './HelpTooltip.svelte';
 	import ContextMenu from './ContextMenu.svelte';
@@ -153,6 +154,50 @@
 		toY: number;
 	} | null>(null);
 	let dragOverNodeId = $state<string | null>(null);
+
+	// Hover popup state
+	let hoverNode = $state<{
+		issue: Issue;
+		x: number;
+		y: number;
+	} | null>(null);
+	let hoverTimeout: ReturnType<typeof setTimeout> | null = null;
+	const HOVER_DELAY = 400; // ms before showing popup
+
+	function handleNodeMouseEnter(e: MouseEvent, issue: Issue) {
+		// Don't show popup while dragging
+		if (dragConnect || isPanning) return;
+
+		// Clear any existing timeout
+		if (hoverTimeout) clearTimeout(hoverTimeout);
+
+		// Start delayed popup
+		hoverTimeout = setTimeout(() => {
+			hoverNode = {
+				issue,
+				x: e.clientX,
+				y: e.clientY
+			};
+		}, HOVER_DELAY);
+	}
+
+	function handleNodeMouseLeave() {
+		if (hoverTimeout) {
+			clearTimeout(hoverTimeout);
+			hoverTimeout = null;
+		}
+		hoverNode = null;
+	}
+
+	function handleNodeMouseMove(e: MouseEvent) {
+		if (hoverNode) {
+			hoverNode = {
+				...hoverNode,
+				x: e.clientX,
+				y: e.clientY
+			};
+		}
+	}
 
 	function handleBackgroundDoubleClick(e: MouseEvent) {
 		// Don't create if we were panning
@@ -1056,6 +1101,9 @@
 						onclick={(e) => handleNodeClick(e, pos.issue.id)}
 						oncontextmenu={(e) => handleContextMenu(e, pos.issue)}
 						onmousedown={(e) => e.stopPropagation()}
+						onmouseenter={(e) => handleNodeMouseEnter(e, pos.issue)}
+						onmouseleave={handleNodeMouseLeave}
+						onmousemove={handleNodeMouseMove}
 						style="cursor: pointer;"
 						role="button"
 						tabindex="0"
@@ -1457,5 +1505,106 @@
 			</div>
 		</form>
 		<p class="text-xs text-gray-400 mt-2">Press Enter to create</p>
+	</div>
+{/if}
+
+<!-- Hover Details Popup -->
+{#if hoverNode}
+	{@const blockers = issueStore.getBlockers(hoverNode.issue.id)}
+	{@const dependencies = hoverNode.issue.dependencies.map(id => issueStore.getById(id)).filter(Boolean) as Issue[]}
+	{@const isBlocked = blockers.length > 0}
+	<div
+		class="fixed z-[200] bg-white rounded-xl shadow-xl border border-gray-200 p-4 max-w-sm pointer-events-none"
+		style="left: {Math.min(hoverNode.x + 16, window.innerWidth - 380)}px; top: {Math.min(hoverNode.y + 16, window.innerHeight - 400)}px;"
+	>
+		<!-- Header with status -->
+		<div class="flex items-start justify-between gap-3 mb-3">
+			<h4 class="font-semibold text-gray-900 leading-tight">{hoverNode.issue.title}</h4>
+			<div class="flex flex-wrap gap-1 flex-shrink-0">
+				<span class="px-2 py-0.5 text-[10px] font-medium rounded-full {
+					hoverNode.issue.status === 'closed' ? 'bg-gray-100 text-gray-600' :
+					hoverNode.issue.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+					isBlocked ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
+				}">
+					{STATUS_LABELS[hoverNode.issue.status]}
+				</span>
+				<span class="px-2 py-0.5 text-[10px] font-medium rounded-full bg-gray-100 text-gray-600">
+					{PRIORITY_LABELS[hoverNode.issue.priority]}
+				</span>
+			</div>
+		</div>
+
+		<!-- Description -->
+		{#if hoverNode.issue.description}
+			<p class="text-sm text-gray-600 mb-3 line-clamp-4">{hoverNode.issue.description}</p>
+		{:else}
+			<p class="text-sm text-gray-400 italic mb-3">No description</p>
+		{/if}
+
+		<!-- Execution Type -->
+		{#if hoverNode.issue.executionType}
+			<div class="mb-3 px-2 py-1.5 rounded-lg bg-gray-50 text-sm">
+				<span class="font-medium text-gray-700">Who:</span>
+				<span class="text-gray-600 ml-1">{EXECUTION_TYPE_LABELS[hoverNode.issue.executionType]}</span>
+				{#if hoverNode.issue.validationRequired}
+					<span class="ml-2 text-amber-600">✓ Needs review</span>
+				{/if}
+			</div>
+		{/if}
+
+		<!-- Dependencies (Must Finish First) -->
+		{#if dependencies.length > 0}
+			<div class="mb-2">
+				<span class="text-xs font-medium text-gray-500 uppercase tracking-wide">Must Finish First</span>
+				<div class="mt-1 space-y-1">
+					{#each dependencies.slice(0, 3) as dep}
+						<div class="flex items-center gap-2 text-sm">
+							<div class="w-2 h-2 rounded-full {dep.status === 'closed' ? 'bg-gray-400' : 'bg-green-500'}"></div>
+							<span class="text-gray-700 truncate">{dep.title}</span>
+							{#if dep.status === 'closed'}
+								<span class="text-gray-400">✓</span>
+							{/if}
+						</div>
+					{/each}
+					{#if dependencies.length > 3}
+						<p class="text-xs text-gray-400">+{dependencies.length - 3} more</p>
+					{/if}
+				</div>
+			</div>
+		{/if}
+
+		<!-- Blockers (Waiting On) -->
+		{#if blockers.length > 0}
+			<div class="mb-2">
+				<span class="text-xs font-medium text-amber-600 uppercase tracking-wide">Waiting On</span>
+				<div class="mt-1 space-y-1">
+					{#each blockers.slice(0, 3) as blocker}
+						<div class="flex items-center gap-2 text-sm">
+							<div class="w-2 h-2 rounded-full bg-amber-500"></div>
+							<span class="text-gray-700 truncate">{blocker.title}</span>
+						</div>
+					{/each}
+					{#if blockers.length > 3}
+						<p class="text-xs text-gray-400">+{blockers.length - 3} more</p>
+					{/if}
+				</div>
+			</div>
+		{/if}
+
+		<!-- AI Assignment -->
+		{#if hoverNode.issue.aiAssignment}
+			<div class="pt-2 border-t border-gray-100 mt-2">
+				<span class="text-xs font-medium text-gray-500">AI Assigned:</span>
+				<span class="text-xs text-gray-700 ml-1">{hoverNode.issue.aiAssignment.modelName}</span>
+			</div>
+		{/if}
+
+		<!-- Needs Human Attention -->
+		{#if hoverNode.issue.needsHuman}
+			<div class="pt-2 mt-2 border-t border-red-100 bg-red-50 -mx-4 -mb-4 px-4 py-2 rounded-b-xl">
+				<span class="text-xs font-medium text-red-600">⚠️ Needs your attention:</span>
+				<span class="text-xs text-red-700 ml-1">{hoverNode.issue.needsHuman.reason}</span>
+			</div>
+		{/if}
 	</div>
 {/if}
