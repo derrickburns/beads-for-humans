@@ -11,6 +11,7 @@
 	import QuickCreate from '$lib/components/QuickCreate.svelte';
 	import WhatNext from '$lib/components/WhatNext.svelte';
 	import BenchmarkSuggestions from '$lib/components/BenchmarkSuggestions.svelte';
+	import ValidationCheckpoints from '$lib/components/ValidationCheckpoints.svelte';
 	import { graphChatStore } from '$lib/stores/graphChat.svelte';
 	import type { IssueStatus } from '$lib/types/issue';
 
@@ -189,6 +190,9 @@
 
 	<!-- AI Capability Benchmark -->
 	<BenchmarkSuggestions />
+
+	<!-- Validation Checkpoints -->
+	<ValidationCheckpoints />
 
 	{#if viewMode === 'graph'}
 		<!-- Graph View (Primary) with Chat Sidebar -->
