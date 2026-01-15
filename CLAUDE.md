@@ -2,6 +2,15 @@
 
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
+## Development Philosophy
+
+### Leverage Existing Open Source Software
+- **Prefer existing, well-tested libraries** over implementing from scratch
+- Look for highly-rated, actively maintained open source tools (Python, JavaScript, etc.)
+- This minimizes testing burden and leverages community-validated code
+- When evaluating options, consider: stars, recent commits, issue responsiveness, documentation
+- Document which external tools/libraries are used and why
+
 ## Quick Reference
 
 ```bash

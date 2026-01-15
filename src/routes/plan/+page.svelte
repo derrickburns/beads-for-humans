@@ -1,16 +1,217 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { issueStore } from '$lib/stores/issues.svelte';
-	import { PRIORITY_LABELS, TYPE_LABELS } from '$lib/types/issue';
-	import type { IssueType, IssuePriority } from '$lib/types/issue';
+	import { PRIORITY_LABELS, TYPE_LABELS, EXECUTION_TYPE_LABELS } from '$lib/types/issue';
+	import type { IssueType, IssuePriority, ExecutionType } from '$lib/types/issue';
 
+	// Mode: 'choose' | 'project' | 'conversational'
+	let mode = $state<'choose' | 'project' | 'conversational'>('choose');
+
+	// ===== Project Decomposition State =====
+	interface DecomposedTask {
+		id: string;
+		title: string;
+		description: string;
+		type: IssueType;
+		priority: IssuePriority;
+		executionType: ExecutionType;
+		validationRequired: boolean;
+		executionReason: string;
+		dependsOn: string[];
+		category: string;
+		estimatedDuration?: string;
+		expertNeeded?: string;
+		selected: boolean; // User can deselect tasks
+	}
+
+	interface Risk {
+		title: string;
+		description: string;
+		severity: 'high' | 'medium' | 'low';
+		mitigation: string;
+		relatedTasks: string[];
+	}
+
+	interface ProjectPlan {
+		summary: string;
+		tasks: DecomposedTask[];
+		risks: Risk[];
+		validationCheckpoints: string[];
+		estimatedTotalDuration?: string;
+		budgetConsiderations?: string[];
+		questionsForUser?: string[];
+	}
+
+	let projectGoal = $state('');
+	let projectContext = $state('');
+	let projectLoading = $state(false);
+	let projectError = $state<string | null>(null);
+	let projectPlan = $state<ProjectPlan | null>(null);
+	let creatingIssues = $state(false);
+
+	// Group tasks by category
+	let tasksByCategory = $derived.by(() => {
+		if (!projectPlan) return new Map<string, DecomposedTask[]>();
+		const groups = new Map<string, DecomposedTask[]>();
+		for (const task of projectPlan.tasks) {
+			const cat = task.category || 'other';
+			if (!groups.has(cat)) groups.set(cat, []);
+			groups.get(cat)!.push(task);
+		}
+		return groups;
+	});
+
+	let selectedTaskCount = $derived(
+		projectPlan?.tasks.filter(t => t.selected).length ?? 0
+	);
+
+	async function decomposeProject() {
+		if (!projectGoal.trim() || projectLoading) return;
+
+		projectLoading = true;
+		projectError = null;
+
+		try {
+			const response = await fetch('/api/decompose-project', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					projectGoal: projectGoal.trim(),
+					context: projectContext.trim() || undefined
+				})
+			});
+
+			const data = await response.json();
+
+			if (data.error) {
+				projectError = data.error;
+			} else if (data.plan) {
+				// Add 'selected' property to all tasks (default true)
+				projectPlan = {
+					...data.plan,
+					tasks: data.plan.tasks.map((t: DecomposedTask) => ({ ...t, selected: true }))
+				};
+			}
+		} catch (e) {
+			projectError = 'Failed to analyze project. Please try again.';
+		} finally {
+			projectLoading = false;
+		}
+	}
+
+	function toggleTaskSelection(taskId: string) {
+		if (!projectPlan) return;
+		projectPlan = {
+			...projectPlan,
+			tasks: projectPlan.tasks.map(t =>
+				t.id === taskId ? { ...t, selected: !t.selected } : t
+			)
+		};
+	}
+
+	function selectAll() {
+		if (!projectPlan) return;
+		projectPlan = {
+			...projectPlan,
+			tasks: projectPlan.tasks.map(t => ({ ...t, selected: true }))
+		};
+	}
+
+	function deselectAll() {
+		if (!projectPlan) return;
+		projectPlan = {
+			...projectPlan,
+			tasks: projectPlan.tasks.map(t => ({ ...t, selected: false }))
+		};
+	}
+
+	async function createSelectedIssues() {
+		if (!projectPlan || creatingIssues) return;
+
+		const selectedTasks = projectPlan.tasks.filter(t => t.selected);
+		if (selectedTasks.length === 0) return;
+
+		creatingIssues = true;
+
+		// Create a mapping from temporary IDs to real IDs
+		const idMap = new Map<string, string>();
+
+		// Create issues in dependency order (tasks with no deps first)
+		const created: string[] = [];
+		const remaining = [...selectedTasks];
+
+		while (remaining.length > 0) {
+			// Find tasks whose dependencies are all created (or not selected)
+			const batch = remaining.filter(task => {
+				const selectedDeps = task.dependsOn.filter(depId =>
+					selectedTasks.some(t => t.id === depId)
+				);
+				return selectedDeps.every(depId => idMap.has(depId));
+			});
+
+			if (batch.length === 0 && remaining.length > 0) {
+				// Circular dependency or missing - create remaining without deps
+				for (const task of remaining) {
+					const issue = issueStore.create({
+						title: task.title,
+						description: task.description,
+						type: task.type,
+						priority: task.priority,
+						executionType: task.executionType,
+						validationRequired: task.validationRequired,
+						executionReason: task.executionReason,
+						dependencies: []
+					});
+					if (issue) {
+						idMap.set(task.id, issue.id);
+						created.push(issue.id);
+					}
+				}
+				break;
+			}
+
+			for (const task of batch) {
+				// Map dependencies to real IDs
+				const realDeps = task.dependsOn
+					.filter(depId => idMap.has(depId))
+					.map(depId => idMap.get(depId)!);
+
+				const issue = issueStore.create({
+					title: task.title,
+					description: task.description,
+					type: task.type,
+					priority: task.priority,
+					executionType: task.executionType,
+					validationRequired: task.validationRequired,
+					executionReason: task.executionReason,
+					dependencies: realDeps
+				});
+
+				if (issue) {
+					idMap.set(task.id, issue.id);
+					created.push(issue.id);
+				}
+
+				// Remove from remaining
+				const idx = remaining.findIndex(t => t.id === task.id);
+				if (idx >= 0) remaining.splice(idx, 1);
+			}
+		}
+
+		creatingIssues = false;
+
+		// Navigate to main page
+		goto('/?created=' + created.length);
+	}
+
+	// ===== Conversational Planning State =====
 	interface Message {
 		role: 'user' | 'assistant';
 		content: string;
 		suggestion?: TaskSuggestion;
 		relatedIssues?: RelatedIssue[];
 		followUpQuestions?: string[];
-		created?: boolean; // Was this suggestion accepted and created?
+		created?: boolean;
 	}
 
 	interface TaskSuggestion {
@@ -33,13 +234,13 @@
 	let loading = $state(false);
 	let createdInSession = $state<string[]>([]);
 
-	// Start with a welcome message
+	// Start with a welcome message when entering conversational mode
 	$effect(() => {
-		if (messages.length === 0) {
+		if (mode === 'conversational' && messages.length === 0) {
 			messages = [{
 				role: 'assistant',
-				content: 'Hi! I\'m your planning assistant. Tell me what you\'re working on, and I\'ll help you break it down into clear, actionable tasks.\n\nDescribe your project, goal, or the work you need to plan.',
-				followUpQuestions: ['I need to build a new feature', 'I have a bug to fix', 'I want to plan a project']
+				content: 'What task do you need to add? I\'ll help you break it down and connect it to your existing plan.',
+				followUpQuestions: ['Add a new task', 'Help me think through something', 'What should I work on next?']
 			}];
 		}
 	});
@@ -47,7 +248,6 @@
 	async function sendMessage(text: string) {
 		if (!text.trim() || loading) return;
 
-		// Add user message
 		messages = [...messages, { role: 'user', content: text }];
 		inputText = '';
 		loading = true;
@@ -81,7 +281,7 @@
 					followUpQuestions: resp.followUpQuestions
 				}];
 			}
-		} catch (e) {
+		} catch {
 			messages = [...messages, {
 				role: 'assistant',
 				content: 'Sorry, something went wrong. Please try again.',
@@ -89,7 +289,6 @@
 			}];
 		} finally {
 			loading = false;
-			// Scroll to bottom
 			setTimeout(() => {
 				const container = document.getElementById('chat-container');
 				if (container) container.scrollTop = container.scrollHeight;
@@ -108,7 +307,6 @@
 		const msg = messages[messageIndex];
 		if (!msg.suggestion) return;
 
-		// Create the issue
 		const created = issueStore.create({
 			title: msg.suggestion.title,
 			description: msg.suggestion.description,
@@ -118,13 +316,10 @@
 		});
 
 		if (created) {
-			// Mark as created
 			messages = messages.map((m, i) =>
 				i === messageIndex ? { ...m, created: true } : m
 			);
 			createdInSession = [...createdInSession, msg.suggestion.title];
-
-			// Send confirmation
 			sendMessage('Done, I accepted that task. What\'s next?');
 		}
 	}
@@ -146,184 +341,488 @@
 		3: 'bg-blue-100 text-blue-800 border-blue-200',
 		4: 'bg-gray-100 text-gray-600 border-gray-200'
 	};
+
+	const executionColors: Record<ExecutionType, string> = {
+		automated: 'bg-emerald-100 text-emerald-800',
+		human: 'bg-rose-100 text-rose-800',
+		ai_assisted: 'bg-sky-100 text-sky-800',
+		human_assisted: 'bg-violet-100 text-violet-800'
+	};
+
+	const categoryLabels: Record<string, string> = {
+		legal: 'Legal & Contracts',
+		financial: 'Financial',
+		physical: 'Physical Tasks',
+		research: 'Research',
+		administrative: 'Administrative',
+		decision: 'Decisions',
+		other: 'Other'
+	};
+
+	const severityColors: Record<string, string> = {
+		high: 'bg-red-100 text-red-800 border-red-300',
+		medium: 'bg-amber-100 text-amber-800 border-amber-300',
+		low: 'bg-blue-100 text-blue-800 border-blue-300'
+	};
 </script>
 
 <svelte:head>
-	<title>Planning Assistant</title>
+	<title>Plan Your Project - Middle Manager</title>
 </svelte:head>
 
-<div class="max-w-3xl mx-auto flex flex-col h-[calc(100vh-12rem)]">
-	<div class="mb-4">
+<div class="max-w-4xl mx-auto">
+	<div class="mb-6">
 		<a href="/" class="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 mb-2">
 			<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
 			</svg>
-			Back to Issues
+			Back to Tasks
 		</a>
-		<div class="flex items-center justify-between">
-			<div>
-				<h1 class="text-2xl font-semibold text-gray-900">Planning Assistant</h1>
-				<p class="text-gray-500 text-sm">Interactive task planning with AI guidance</p>
-			</div>
-			{#if createdInSession.length > 0}
-				<span class="text-sm text-green-600 font-medium">
-					{createdInSession.length} task{createdInSession.length === 1 ? '' : 's'} created
-				</span>
-			{/if}
-		</div>
 	</div>
 
-	<!-- Chat Container -->
-	<div
-		id="chat-container"
-		class="flex-1 overflow-y-auto bg-white rounded-xl border border-gray-200 p-4 space-y-4"
-	>
-		{#each messages as msg, i}
-			<div class="flex {msg.role === 'user' ? 'justify-end' : 'justify-start'}">
-				<div class="max-w-[85%] {msg.role === 'user'
-					? 'bg-blue-600 text-white rounded-2xl rounded-br-md px-4 py-3'
-					: 'bg-gray-100 text-gray-900 rounded-2xl rounded-bl-md px-4 py-3'}">
+	{#if mode === 'choose'}
+		<!-- Mode Selection -->
+		<div class="text-center mb-8">
+			<h1 class="text-3xl font-bold text-gray-900 mb-2">Plan Your Project</h1>
+			<p class="text-gray-600">Let AI help you break down your project into actionable tasks</p>
+		</div>
 
-					<!-- Message content -->
-					<p class="whitespace-pre-wrap">{msg.content}</p>
+		<div class="grid md:grid-cols-2 gap-6">
+			<!-- Start a New Project -->
+			<button
+				onclick={() => { mode = 'project'; }}
+				class="p-8 bg-white rounded-2xl border-2 border-gray-200 hover:border-blue-400 hover:shadow-lg transition-all text-left group"
+			>
+				<div class="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-200 transition-colors">
+					<svg class="w-8 h-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+					</svg>
+				</div>
+				<h2 class="text-xl font-semibold text-gray-900 mb-2">Start a New Project</h2>
+				<p class="text-gray-600 mb-4">
+					Describe your goal and I'll create a complete plan with tasks, dependencies, and checkpoints.
+				</p>
+				<div class="text-sm text-gray-500">
+					<span class="font-medium">Best for:</span> New projects like selling a house, kitchen remodel, retirement planning
+				</div>
+			</button>
 
-					<!-- Task Suggestion Card -->
-					{#if msg.suggestion && msg.role === 'assistant'}
-						<div class="mt-3 p-4 bg-white rounded-xl border {msg.created ? 'border-green-300 bg-green-50' : 'border-gray-200'} shadow-sm">
-							{#if msg.created}
-								<div class="flex items-center gap-2 text-green-600 mb-2">
-									<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-									</svg>
-									<span class="text-sm font-medium">Created!</span>
-								</div>
-							{/if}
-							<div class="flex items-center gap-2 mb-2">
-								<span class="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-200 text-gray-700">
-									{TYPE_LABELS[msg.suggestion.type]}
-								</span>
-								<span class="text-xs font-medium px-2 py-0.5 rounded-full {priorityColors[msg.suggestion.priority]}">
-									{PRIORITY_LABELS[msg.suggestion.priority]}
-								</span>
-								<span class="text-xs text-gray-400">
-									{Math.round(msg.suggestion.confidence * 100)}% confident
-								</span>
-							</div>
-							<h4 class="font-semibold text-gray-900">{msg.suggestion.title}</h4>
-							{#if msg.suggestion.description}
-								<p class="text-sm text-gray-600 mt-1">{msg.suggestion.description}</p>
-							{/if}
-							{#if msg.suggestion.dependsOn.length > 0}
-								<div class="mt-2 flex items-center gap-2 flex-wrap">
-									<span class="text-xs text-gray-500">Depends on:</span>
-									{#each msg.suggestion.dependsOn as depId}
-										{@const dep = issueStore.getById(depId)}
-										{#if dep}
-											<span class="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
-												{dep.title}
-											</span>
-										{/if}
-									{/each}
-								</div>
-							{/if}
+			<!-- Add Individual Tasks -->
+			<button
+				onclick={() => { mode = 'conversational'; }}
+				class="p-8 bg-white rounded-2xl border-2 border-gray-200 hover:border-purple-400 hover:shadow-lg transition-all text-left group"
+			>
+				<div class="w-14 h-14 bg-purple-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-purple-200 transition-colors">
+					<svg class="w-8 h-8 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+					</svg>
+				</div>
+				<h2 class="text-xl font-semibold text-gray-900 mb-2">Add Tasks Interactively</h2>
+				<p class="text-gray-600 mb-4">
+					Chat with AI to add tasks one at a time. Great for refining an existing plan.
+				</p>
+				<div class="text-sm text-gray-500">
+					<span class="font-medium">Best for:</span> Adding to existing plans, quick task capture
+				</div>
+			</button>
+		</div>
 
-							{#if !msg.created}
-								<div class="mt-3 flex items-center gap-2">
-									<button
-										onclick={() => acceptSuggestion(i)}
-										class="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
-									>
-										Accept
-									</button>
-									<button
-										onclick={() => modifySuggestion(i)}
-										class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-									>
-										Modify
-									</button>
-									<button
-										onclick={skipSuggestion}
-										class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
-									>
-										Skip
-									</button>
-								</div>
-							{/if}
+		<!-- Example Projects -->
+		<div class="mt-12">
+			<h3 class="text-lg font-medium text-gray-900 mb-4 text-center">Example Projects People Plan</h3>
+			<div class="flex flex-wrap justify-center gap-3">
+				{#each ['Sell my house', 'Kitchen remodel', 'Choose a school for my child', 'Plan retirement', 'Start a small business', 'Plan a wedding'] as example}
+					<button
+						onclick={() => { mode = 'project'; projectGoal = example; }}
+						class="px-4 py-2 bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 transition-colors text-sm"
+					>
+						{example}
+					</button>
+				{/each}
+			</div>
+		</div>
+
+	{:else if mode === 'project'}
+		<!-- Project Decomposition Mode -->
+		{#if !projectPlan}
+			<!-- Input Form -->
+			<div class="bg-white rounded-2xl border border-gray-200 p-8">
+				<div class="flex items-center justify-between mb-6">
+					<div>
+						<h1 class="text-2xl font-semibold text-gray-900">Start a New Project</h1>
+						<p class="text-gray-500 text-sm mt-1">Describe your goal and I'll create a complete plan</p>
+					</div>
+					<button
+						onclick={() => { mode = 'choose'; projectGoal = ''; projectContext = ''; }}
+						class="text-sm text-gray-500 hover:text-gray-700"
+					>
+						← Back
+					</button>
+				</div>
+
+				<div class="space-y-6">
+					<div>
+						<label for="goal" class="block text-sm font-medium text-gray-700 mb-2">
+							What do you want to accomplish?
+						</label>
+						<input
+							id="goal"
+							type="text"
+							bind:value={projectGoal}
+							placeholder="e.g., Sell my house, Plan a kitchen remodel, Choose a school for my child"
+							class="w-full px-4 py-3 text-lg bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+						/>
+					</div>
+
+					<div>
+						<label for="context" class="block text-sm font-medium text-gray-700 mb-2">
+							Any additional context? <span class="text-gray-400">(optional)</span>
+						</label>
+						<textarea
+							id="context"
+							bind:value={projectContext}
+							placeholder="e.g., Timeline, budget, location, specific concerns..."
+							rows="3"
+							class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+						></textarea>
+					</div>
+
+					{#if projectError}
+						<div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+							{projectError}
 						</div>
 					{/if}
 
-					<!-- Related Issues -->
-					{#if msg.relatedIssues && msg.relatedIssues.length > 0}
-						<div class="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
-							<p class="text-xs font-medium text-blue-800 mb-2">Related existing issues:</p>
-							<div class="space-y-1">
-								{#each msg.relatedIssues as related}
-									<a
-										href="/issue/{related.id}"
-										class="block text-sm text-blue-600 hover:text-blue-800"
-									>
-										• {related.title}
-										<span class="text-blue-400">- {related.similarity}</span>
-									</a>
-								{/each}
-							</div>
-						</div>
-					{/if}
-
-					<!-- Quick Response Buttons -->
-					{#if msg.followUpQuestions && msg.followUpQuestions.length > 0 && i === messages.length - 1 && msg.role === 'assistant'}
-						<div class="mt-3 flex flex-wrap gap-2">
-							{#each msg.followUpQuestions as question}
-								<button
-									onclick={() => sendMessage(question)}
-									disabled={loading}
-									class="px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-full hover:bg-blue-100 transition-colors disabled:opacity-50"
-								>
-									{question}
-								</button>
-							{/each}
-						</div>
-					{/if}
+					<button
+						onclick={decomposeProject}
+						disabled={!projectGoal.trim() || projectLoading}
+						class="w-full py-4 bg-blue-600 text-white text-lg font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-3"
+					>
+						{#if projectLoading}
+							<span class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+							Analyzing your project...
+						{:else}
+							<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+							</svg>
+							Create My Plan
+						{/if}
+					</button>
 				</div>
 			</div>
-		{/each}
 
-		{#if loading}
-			<div class="flex justify-start">
-				<div class="bg-gray-100 rounded-2xl rounded-bl-md px-4 py-3">
-					<div class="flex items-center gap-2 text-gray-500">
-						<span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></span>
-						<span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></span>
-						<span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></span>
+		{:else}
+			<!-- Plan Review -->
+			<div class="space-y-6">
+				<div class="flex items-center justify-between">
+					<div>
+						<h1 class="text-2xl font-semibold text-gray-900">Your Project Plan</h1>
+						<p class="text-gray-500">{projectPlan.summary}</p>
+					</div>
+					<button
+						onclick={() => { projectPlan = null; }}
+						class="text-sm text-gray-500 hover:text-gray-700"
+					>
+						← Start Over
+					</button>
+				</div>
+
+				<!-- Stats Bar -->
+				<div class="flex items-center gap-6 p-4 bg-white rounded-xl border border-gray-200">
+					<div class="text-center">
+						<div class="text-2xl font-bold text-gray-900">{projectPlan.tasks.length}</div>
+						<div class="text-xs text-gray-500">Total Tasks</div>
+					</div>
+					<div class="text-center">
+						<div class="text-2xl font-bold text-blue-600">{selectedTaskCount}</div>
+						<div class="text-xs text-gray-500">Selected</div>
+					</div>
+					{#if projectPlan.estimatedTotalDuration}
+						<div class="text-center">
+							<div class="text-2xl font-bold text-gray-900">{projectPlan.estimatedTotalDuration}</div>
+							<div class="text-xs text-gray-500">Est. Duration</div>
+						</div>
+					{/if}
+					<div class="text-center">
+						<div class="text-2xl font-bold text-amber-600">{projectPlan.risks.length}</div>
+						<div class="text-xs text-gray-500">Risks Identified</div>
+					</div>
+					<div class="ml-auto flex items-center gap-2">
+						<button onclick={selectAll} class="text-sm text-blue-600 hover:text-blue-800">Select All</button>
+						<span class="text-gray-300">|</span>
+						<button onclick={deselectAll} class="text-sm text-gray-500 hover:text-gray-700">Deselect All</button>
+					</div>
+				</div>
+
+				<!-- Questions for User -->
+				{#if projectPlan.questionsForUser && projectPlan.questionsForUser.length > 0}
+					<div class="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+						<h3 class="font-medium text-amber-900 mb-2">Questions to Consider</h3>
+						<ul class="space-y-1 text-sm text-amber-800">
+							{#each projectPlan.questionsForUser as question}
+								<li class="flex items-start gap-2">
+									<span class="text-amber-500 mt-0.5">?</span>
+									{question}
+								</li>
+							{/each}
+						</ul>
+					</div>
+				{/if}
+
+				<!-- Tasks by Category -->
+				{#each [...tasksByCategory.entries()] as [category, tasks]}
+					<div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+						<div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+							<h3 class="font-medium text-gray-900">{categoryLabels[category] || category}</h3>
+							<p class="text-xs text-gray-500">{tasks.filter(t => t.selected).length} of {tasks.length} selected</p>
+						</div>
+						<div class="divide-y divide-gray-100">
+							{#each tasks as task}
+								<div
+									class="p-4 hover:bg-gray-50 transition-colors {task.selected ? '' : 'opacity-50'}"
+								>
+									<div class="flex items-start gap-3">
+										<input
+											type="checkbox"
+											checked={task.selected}
+											onchange={() => toggleTaskSelection(task.id)}
+											class="mt-1 w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+										/>
+										<div class="flex-1 min-w-0">
+											<div class="flex items-center gap-2 flex-wrap mb-1">
+												<span class="text-xs font-medium px-2 py-0.5 rounded-full {executionColors[task.executionType]}">
+													{EXECUTION_TYPE_LABELS[task.executionType]}
+												</span>
+												<span class="text-xs font-medium px-2 py-0.5 rounded-full {priorityColors[task.priority]}">
+													P{task.priority}
+												</span>
+												{#if task.validationRequired}
+													<span class="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+														✓ Needs Verification
+													</span>
+												{/if}
+												{#if task.estimatedDuration}
+													<span class="text-xs text-gray-500">{task.estimatedDuration}</span>
+												{/if}
+											</div>
+											<h4 class="font-medium text-gray-900">{task.title}</h4>
+											{#if task.description}
+												<p class="text-sm text-gray-600 mt-1">{task.description}</p>
+											{/if}
+											{#if task.expertNeeded}
+												<p class="text-xs text-amber-600 mt-1">
+													<span class="font-medium">Expert needed:</span> {task.expertNeeded}
+												</p>
+											{/if}
+										</div>
+									</div>
+								</div>
+							{/each}
+						</div>
+					</div>
+				{/each}
+
+				<!-- Risks -->
+				{#if projectPlan.risks.length > 0}
+					<div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+						<div class="px-4 py-3 bg-red-50 border-b border-red-100">
+							<h3 class="font-medium text-red-900">Risks to Watch</h3>
+							<p class="text-xs text-red-700">Things that could go wrong - plan for these</p>
+						</div>
+						<div class="divide-y divide-gray-100">
+							{#each projectPlan.risks as risk}
+								<div class="p-4">
+									<div class="flex items-start gap-3">
+										<span class="px-2 py-0.5 text-xs font-medium rounded {severityColors[risk.severity]}">
+											{risk.severity}
+										</span>
+										<div class="flex-1">
+											<h4 class="font-medium text-gray-900">{risk.title}</h4>
+											<p class="text-sm text-gray-600 mt-1">{risk.description}</p>
+											<p class="text-sm text-green-700 mt-2">
+												<span class="font-medium">Mitigation:</span> {risk.mitigation}
+											</p>
+										</div>
+									</div>
+								</div>
+							{/each}
+						</div>
+					</div>
+				{/if}
+
+				<!-- Budget Considerations -->
+				{#if projectPlan.budgetConsiderations && projectPlan.budgetConsiderations.length > 0}
+					<div class="p-4 bg-green-50 border border-green-200 rounded-xl">
+						<h3 class="font-medium text-green-900 mb-2">Budget Considerations</h3>
+						<ul class="space-y-1 text-sm text-green-800">
+							{#each projectPlan.budgetConsiderations as item}
+								<li class="flex items-start gap-2">
+									<span class="text-green-500 mt-0.5">$</span>
+									{item}
+								</li>
+							{/each}
+						</ul>
+					</div>
+				{/if}
+
+				<!-- Create Issues Button -->
+				<div class="sticky bottom-4 bg-white rounded-xl border border-gray-200 p-4 shadow-lg">
+					<div class="flex items-center justify-between">
+						<div>
+							<p class="font-medium text-gray-900">{selectedTaskCount} tasks selected</p>
+							<p class="text-sm text-gray-500">Ready to add to your project</p>
+						</div>
+						<button
+							onclick={createSelectedIssues}
+							disabled={selectedTaskCount === 0 || creatingIssues}
+							class="px-6 py-3 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+						>
+							{#if creatingIssues}
+								<span class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+								Creating...
+							{:else}
+								Create {selectedTaskCount} Tasks
+							{/if}
+						</button>
 					</div>
 				</div>
 			</div>
 		{/if}
-	</div>
 
-	<!-- Input Area -->
-	<div class="mt-4 bg-white rounded-xl border border-gray-200 p-3">
-		<div class="flex items-end gap-3">
-			<textarea
-				bind:value={inputText}
-				onkeydown={handleKeydown}
-				placeholder="Describe what you need to do..."
-				rows="2"
-				disabled={loading}
-				class="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 resize-none disabled:opacity-50"
-			></textarea>
-			<button
-				onclick={() => sendMessage(inputText)}
-				disabled={loading || !inputText.trim()}
-				class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+	{:else if mode === 'conversational'}
+		<!-- Conversational Mode -->
+		<div class="flex flex-col h-[calc(100vh-12rem)]">
+			<div class="flex items-center justify-between mb-4">
+				<div>
+					<h1 class="text-2xl font-semibold text-gray-900">Add Tasks</h1>
+					<p class="text-gray-500 text-sm">Interactive task planning</p>
+				</div>
+				<div class="flex items-center gap-4">
+					{#if createdInSession.length > 0}
+						<span class="text-sm text-green-600 font-medium">
+							{createdInSession.length} task{createdInSession.length === 1 ? '' : 's'} created
+						</span>
+					{/if}
+					<button
+						onclick={() => { mode = 'choose'; messages = []; createdInSession = []; }}
+						class="text-sm text-gray-500 hover:text-gray-700"
+					>
+						← Back
+					</button>
+				</div>
+			</div>
+
+			<!-- Chat Container -->
+			<div
+				id="chat-container"
+				class="flex-1 overflow-y-auto bg-white rounded-xl border border-gray-200 p-4 space-y-4"
 			>
+				{#each messages as msg, i}
+					<div class="flex {msg.role === 'user' ? 'justify-end' : 'justify-start'}">
+						<div class="max-w-[85%] {msg.role === 'user'
+							? 'bg-blue-600 text-white rounded-2xl rounded-br-md px-4 py-3'
+							: 'bg-gray-100 text-gray-900 rounded-2xl rounded-bl-md px-4 py-3'}">
+
+							<p class="whitespace-pre-wrap">{msg.content}</p>
+
+							{#if msg.suggestion && msg.role === 'assistant'}
+								<div class="mt-3 p-4 bg-white rounded-xl border {msg.created ? 'border-green-300 bg-green-50' : 'border-gray-200'} shadow-sm">
+									{#if msg.created}
+										<div class="flex items-center gap-2 text-green-600 mb-2">
+											<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+											</svg>
+											<span class="text-sm font-medium">Created!</span>
+										</div>
+									{/if}
+									<div class="flex items-center gap-2 mb-2">
+										<span class="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-200 text-gray-700">
+											{TYPE_LABELS[msg.suggestion.type]}
+										</span>
+										<span class="text-xs font-medium px-2 py-0.5 rounded-full {priorityColors[msg.suggestion.priority]}">
+											{PRIORITY_LABELS[msg.suggestion.priority]}
+										</span>
+									</div>
+									<h4 class="font-semibold text-gray-900">{msg.suggestion.title}</h4>
+									{#if msg.suggestion.description}
+										<p class="text-sm text-gray-600 mt-1">{msg.suggestion.description}</p>
+									{/if}
+
+									{#if !msg.created}
+										<div class="mt-3 flex items-center gap-2">
+											<button
+												onclick={() => acceptSuggestion(i)}
+												class="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
+											>
+												Accept
+											</button>
+											<button
+												onclick={() => modifySuggestion(i)}
+												class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+											>
+												Modify
+											</button>
+											<button
+												onclick={skipSuggestion}
+												class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+											>
+												Skip
+											</button>
+										</div>
+									{/if}
+								</div>
+							{/if}
+
+							{#if msg.followUpQuestions && msg.followUpQuestions.length > 0 && i === messages.length - 1 && msg.role === 'assistant'}
+								<div class="mt-3 flex flex-wrap gap-2">
+									{#each msg.followUpQuestions as question}
+										<button
+											onclick={() => sendMessage(question)}
+											disabled={loading}
+											class="px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-full hover:bg-blue-100 transition-colors disabled:opacity-50"
+										>
+											{question}
+										</button>
+									{/each}
+								</div>
+							{/if}
+						</div>
+					</div>
+				{/each}
+
 				{#if loading}
-					<span class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block"></span>
-				{:else}
-					Send
+					<div class="flex justify-start">
+						<div class="bg-gray-100 rounded-2xl rounded-bl-md px-4 py-3">
+							<div class="flex items-center gap-2 text-gray-500">
+								<span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></span>
+								<span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></span>
+								<span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></span>
+							</div>
+						</div>
+					</div>
 				{/if}
-			</button>
+			</div>
+
+			<!-- Input Area -->
+			<div class="mt-4 bg-white rounded-xl border border-gray-200 p-3">
+				<div class="flex items-end gap-3">
+					<textarea
+						bind:value={inputText}
+						onkeydown={handleKeydown}
+						placeholder="Describe what you need to do..."
+						rows="2"
+						disabled={loading}
+						class="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 resize-none disabled:opacity-50"
+					></textarea>
+					<button
+						onclick={() => sendMessage(inputText)}
+						disabled={loading || !inputText.trim()}
+						class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+					>
+						Send
+					</button>
+				</div>
+			</div>
 		</div>
-		<p class="text-xs text-gray-400 mt-2">Press Enter to send, Shift+Enter for new line</p>
-	</div>
+	{/if}
 </div>
