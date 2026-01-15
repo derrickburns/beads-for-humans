@@ -4,6 +4,7 @@
 	import type { Issue, RelationshipSuggestion, GraphImprovement, ExecutionType } from '$lib/types/issue';
 	import { getModelAbbrev, getModelColor } from '$lib/types/graphChat';
 	import HelpTooltip from './HelpTooltip.svelte';
+	import ContextMenu from './ContextMenu.svelte';
 
 	// Execution type visual config
 	const executionTypeConfig: Record<ExecutionType, { color: string; bgColor: string; icon: string; label: string }> = {
@@ -85,6 +86,19 @@
 
 	// Error state for showing messages
 	let errorMessage = $state<string | null>(null);
+
+	// Context menu state
+	let contextMenu = $state<{ issue: Issue; x: number; y: number } | null>(null);
+
+	function handleContextMenu(e: MouseEvent, issue: Issue) {
+		e.preventDefault();
+		e.stopPropagation();
+		contextMenu = { issue, x: e.clientX, y: e.clientY };
+	}
+
+	function closeContextMenu() {
+		contextMenu = null;
+	}
 
 	// Sync focusedIssueId when focusId prop changes
 	$effect(() => {
@@ -831,6 +845,7 @@
 					<g
 						transform="translate({pos.x}, {pos.y})"
 						onclick={(e) => handleNodeClick(e, pos.issue.id)}
+						oncontextmenu={(e) => handleContextMenu(e, pos.issue)}
 						onmousedown={(e) => e.stopPropagation()}
 						style="cursor: pointer;"
 						role="button"
@@ -1063,9 +1078,19 @@
 
 	<!-- Help text -->
 	<div class="text-center text-sm text-gray-400 pt-2">
-		Click to select · Double-click to edit · Scroll to zoom · Drag to pan
+		Click to select · Double-click to edit · Scroll to zoom · Drag to pan · Right-click for menu
 		{#if !focusedIssueId}
 			· <span class="text-purple-600">Select an issue to see AI suggestions</span>
 		{/if}
 	</div>
 </div>
+
+<!-- Context Menu -->
+{#if contextMenu}
+	<ContextMenu
+		issue={contextMenu.issue}
+		x={contextMenu.x}
+		y={contextMenu.y}
+		onClose={closeContextMenu}
+	/>
+{/if}

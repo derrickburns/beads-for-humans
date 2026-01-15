@@ -17,12 +17,23 @@
 	let isNewIssue = $derived($page.url.searchParams.get('new') === 'true');
 	let showFollowUpSuggestions = $state(true);
 
-	// Clean up URL after showing suggestions
+	// Check if should start in edit mode (from ?edit=true param)
+	let startInEditMode = $derived($page.url.searchParams.get('edit') === 'true');
+
+	// Clean up URL params
 	$effect(() => {
-		if (browser && isNewIssue) {
+		if (browser && (isNewIssue || startInEditMode)) {
 			const url = new URL(window.location.href);
 			url.searchParams.delete('new');
+			url.searchParams.delete('edit');
 			window.history.replaceState({}, '', url.toString());
+		}
+	});
+
+	// Start in edit mode if requested
+	$effect(() => {
+		if (startInEditMode && issue) {
+			editing = true;
 		}
 	});
 
