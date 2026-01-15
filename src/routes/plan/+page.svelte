@@ -305,7 +305,12 @@
 
 	function acceptSuggestion(messageIndex: number) {
 		const msg = messages[messageIndex];
-		if (!msg.suggestion) return;
+		if (!msg.suggestion || msg.created) return; // Guard against double-clicks
+
+		// Immediately mark as created to prevent duplicate clicks
+		messages = messages.map((m, i) =>
+			i === messageIndex ? { ...m, created: true } : m
+		);
 
 		const created = issueStore.create({
 			title: msg.suggestion.title,
@@ -316,9 +321,6 @@
 		});
 
 		if (created) {
-			messages = messages.map((m, i) =>
-				i === messageIndex ? { ...m, created: true } : m
-			);
 			createdInSession = [...createdInSession, msg.suggestion.title];
 			sendMessage('Done, I accepted that task. What\'s next?');
 		}
@@ -806,7 +808,7 @@
 								</div>
 							{/if}
 
-							{#if msg.followUpQuestions && msg.followUpQuestions.length > 0 && i === messages.length - 1 && msg.role === 'assistant'}
+							{#if msg.followUpQuestions && msg.followUpQuestions.length > 0 && i === messages.length - 1 && msg.role === 'assistant' && !msg.suggestion}
 								<div class="mt-3 flex flex-wrap gap-2">
 									{#each msg.followUpQuestions as question}
 										<button

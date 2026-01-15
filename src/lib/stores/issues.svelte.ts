@@ -83,6 +83,12 @@ class IssueStore {
 		return this.issues.find((i) => i.id === id);
 	}
 
+	// Check if an issue with this title already exists (case-insensitive)
+	findByTitle(title: string): Issue | undefined {
+		const normalizedTitle = title.toLowerCase().trim();
+		return this.issues.find(i => i.title.toLowerCase().trim() === normalizedTitle);
+	}
+
 	create(data: {
 		title: string;
 		description: string;
@@ -93,7 +99,14 @@ class IssueStore {
 		validationRequired?: boolean;
 		aiConfidence?: number;
 		executionReason?: string;
-	}): Issue {
+	}): Issue | undefined {
+		// Prevent duplicates - check if issue with same title exists
+		const existing = this.findByTitle(data.title);
+		if (existing) {
+			console.warn(`Issue with title "${data.title}" already exists, skipping creation`);
+			return undefined;
+		}
+
 		const now = new Date().toISOString();
 		const issue: Issue = {
 			id: generateId(),
