@@ -3,6 +3,18 @@ import type { RequestHandler } from './$types';
 import type { Issue, IssueType, IssuePriority } from '$lib/types/issue';
 import { chatCompletion } from '$lib/ai/provider';
 
+export interface PartialCompletion {
+	existingIssueId: string;  // ID of existing issue that is partially done
+	existingTitle: string;    // Title of existing issue
+	completedPortion: string; // What was completed
+	remainingWork: string;    // What still needs to be done
+	suggestedSplit: {
+		completedTitle: string;
+		remainingTitle: string;
+	};
+	confidence: number;       // 0-1
+}
+
 export interface ParsedTask {
 	tempId: string;
 	title: string;
@@ -15,6 +27,7 @@ export interface ParsedTask {
 
 export interface ParseResult {
 	tasks: ParsedTask[];
+	partialCompletions: PartialCompletion[];  // Existing issues with partial progress
 	reasoning: string;
 }
 
@@ -26,7 +39,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	};
 
 	if (!text || text.trim().length < 10) {
-		return json({ error: 'Please enter more text describing your tasks', tasks: [], reasoning: '' });
+		return json({ error: 'Please enter more text describing your tasks', tasks: [], partialCompletions: [], reasoning: '' });
 	}
 
 	const existingContext = existingIssues.length > 0
@@ -51,6 +64,13 @@ Instructions:
 7. If tasks relate to existing issues, include those IDs in suggestedExistingDeps
 8. Write clear, actionable titles and brief descriptions
 
+IMPORTANT - Detect Partial Completions:
+If the input text indicates that SOME work on an existing issue has been completed but more remains:
+- Identify which existing issue is affected
+- Describe what portion is complete vs what remains
+- Suggest how to split the issue (completed title + remaining title)
+- This helps refactor existing issues that are partially done
+
 Respond in JSON format:
 {
   "tasks": [
@@ -64,6 +84,19 @@ Respond in JSON format:
       "suggestedExistingDeps": ["existing-issue-id"]
     }
   ],
+  "partialCompletions": [
+    {
+      "existingIssueId": "ID of existing issue",
+      "existingTitle": "Title of existing issue",
+      "completedPortion": "What has been completed",
+      "remainingWork": "What still needs to be done",
+      "suggestedSplit": {
+        "completedTitle": "Suggested title for completed portion",
+        "remainingTitle": "Suggested title for remaining work"
+      },
+      "confidence": 0.0-1.0
+    }
+  ],
   "reasoning": "Brief explanation of the task breakdown and dependency logic"
 }
 
@@ -71,7 +104,8 @@ Important:
 - Tasks should be actionable and specific
 - Dependencies should reflect true ordering constraints (what MUST be done first)
 - Don't create artificial dependencies - only when truly necessary
-- Keep descriptions concise but informative`;
+- Keep descriptions concise but informative
+- Only include partialCompletions if the input text clearly indicates partial progress on an existing issue`;
 
 	try {
 		const result = await chatCompletion({
@@ -82,12 +116,12 @@ Important:
 
 		if (result.error || !result.content) {
 			console.error('AI API error:', result.error);
-			return json({ error: 'Failed to parse tasks', tasks: [], reasoning: '' });
+			return json({ error: 'Failed to parse tasks', tasks: [], partialCompletions: [], reasoning: '' });
 		}
 
 		const jsonMatch = result.content.match(/\{[\s\S]*\}/);
 		if (!jsonMatch) {
-			return json({ error: 'Could not parse AI response', tasks: [], reasoning: '' });
+			return json({ error: 'Could not parse AI response', tasks: [], partialCompletions: [], reasoning: '' });
 		}
 
 		const parsed = JSON.parse(jsonMatch[0]) as ParseResult;
@@ -105,12 +139,32 @@ Important:
 			description: t.description || ''
 		}));
 
+		// Validate partial completions
+		const validPartialCompletions = (parsed.partialCompletions || []).filter(pc => {
+			// Verify the existing issue ID is valid
+			const existingIssue = existingIssues.find(i => i.id === pc.existingIssueId);
+			if (!existingIssue) return false;
+
+			// Must have required fields
+			if (!pc.completedPortion || !pc.remainingWork) return false;
+			if (!pc.suggestedSplit?.completedTitle || !pc.suggestedSplit?.remainingTitle) return false;
+
+			// Confidence must be reasonable
+			if (typeof pc.confidence !== 'number' || pc.confidence < 0.5) return false;
+
+			return true;
+		}).map(pc => ({
+			...pc,
+			existingTitle: existingIssues.find(i => i.id === pc.existingIssueId)?.title || pc.existingTitle
+		}));
+
 		return json({
 			tasks: validTasks,
+			partialCompletions: validPartialCompletions,
 			reasoning: parsed.reasoning || ''
 		});
 	} catch (error) {
 		console.error('Error parsing tasks:', error);
-		return json({ error: 'Failed to parse tasks', tasks: [], reasoning: '' });
+		return json({ error: 'Failed to parse tasks', tasks: [], partialCompletions: [], reasoning: '' });
 	}
 };

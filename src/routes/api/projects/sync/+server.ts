@@ -15,6 +15,23 @@ interface ExternalIssue {
 	close_reason?: string;
 }
 
+interface PartialMatch {
+	localIssueId: string;
+	localTitle: string;
+	completedPortion: string;
+	remainingWork: string;
+	matchedExternalIssues: Array<{
+		id: string;
+		title: string;
+		status: string;
+	}>;
+	confidence: number;
+	suggestedSplit: {
+		completedTitle: string;
+		remainingTitle: string;
+	};
+}
+
 interface SyncResult {
 	projectName: string;
 	projectPath: string;
@@ -33,6 +50,7 @@ interface SyncResult {
 		shouldClose: boolean;
 		reason?: string;
 	}>;
+	partialMatches: PartialMatch[];
 	summary: string;
 }
 
@@ -88,6 +106,7 @@ export const POST: RequestHandler = async ({ request }) => {
 					closed: closedExternal
 				},
 				matches: [],
+				partialMatches: [],
 				summary: `Project has ${externalIssues.length} issues (${closedExternal} closed, ${openExternal} open). No local issues to sync.`
 			} as SyncResult);
 		}
@@ -100,20 +119,30 @@ EXTERNAL ISSUES (from ${projectPath}):
 ${externalIssues
 	.map(
 		(i) =>
-			`- [${i.id}] "${i.title}" (${i.status})${i.close_reason ? ` - Closed: ${i.close_reason}` : ''}`
+			`- [${i.id}] "${i.title}" (${i.status})${i.close_reason ? ` - Closed: ${i.close_reason}` : ''}${i.description ? ` - ${i.description.slice(0, 100)}...` : ''}`
 	)
 	.join('\n')}
 
 LOCAL ISSUES (in our tracker):
-${localIssues.filter((i) => i.status !== 'closed').map((i) => `- [${i.id}] "${i.title}" (${i.status})`).join('\n')}
+${localIssues.filter((i) => i.status !== 'closed').map((i) => `- [${i.id}] "${i.title}" (${i.status})${i.description ? ` - ${i.description.slice(0, 100)}...` : ''}`).join('\n')}
 
-TASK: Identify which LOCAL issues should be marked as CLOSED based on matching CLOSED EXTERNAL issues.
+TASK: Identify two types of matches:
 
-Rules:
-1. Only match if the issues are clearly about the same work
-2. If an external issue is CLOSED and matches a local open issue, mark it for closing
-3. Include a confidence score (0.0-1.0) for each match
-4. Only include matches with confidence >= 0.7
+1. COMPLETE MATCHES: Local issues that should be marked CLOSED because a matching external issue is closed.
+
+2. PARTIAL MATCHES: Local issues where SOME work is done (one or more closed external issues address PART of the local issue), but additional work remains. These should be suggested for REFACTORING (splitting into completed and remaining parts).
+
+Rules for Complete Matches:
+- Only match if the issues are clearly about the same work
+- The external issue must be CLOSED
+- Include confidence score (0.0-1.0), only include if >= 0.7
+
+Rules for Partial Matches:
+- The local issue scope is BROADER than what the external issue(s) cover
+- At least one related external issue is CLOSED
+- Identify what portion is complete and what remains
+- Suggest how to split the issue
+- Include confidence score (0.0-1.0), only include if >= 0.6
 
 Respond in JSON:
 {
@@ -127,6 +156,22 @@ Respond in JSON:
       "confidence": 0.0-1.0,
       "shouldClose": true,
       "reason": "Why this match was made"
+    }
+  ],
+  "partialMatches": [
+    {
+      "localIssueId": "local-id",
+      "localTitle": "local title",
+      "completedPortion": "Description of what has been completed",
+      "remainingWork": "Description of what still needs to be done",
+      "matchedExternalIssues": [
+        {"id": "ext-id", "title": "external title", "status": "closed"}
+      ],
+      "confidence": 0.0-1.0,
+      "suggestedSplit": {
+        "completedTitle": "Suggested title for completed portion",
+        "remainingTitle": "Suggested title for remaining work"
+      }
     }
   ],
   "summary": "Brief summary of what was found"
@@ -148,6 +193,7 @@ Respond in JSON:
 					closed: closedExternal
 				},
 				matches: [],
+				partialMatches: [],
 				summary: 'AI analysis failed. Project context loaded but no automatic matching performed.'
 			} as SyncResult);
 		}
@@ -164,13 +210,14 @@ Respond in JSON:
 					closed: closedExternal
 				},
 				matches: [],
+				partialMatches: [],
 				summary: result.content
 			} as SyncResult);
 		}
 
 		const parsed = JSON.parse(jsonMatch[0]);
 
-		// Validate matches
+		// Validate complete matches
 		const validMatches = (parsed.matches || []).filter((match: SyncResult['matches'][0]) => {
 			// Verify local issue exists and is not already closed
 			const localIssue = localIssues.find((i) => i.id === match.localIssueId);
@@ -183,6 +230,34 @@ Respond in JSON:
 			return match.confidence >= 0.7;
 		});
 
+		// Validate partial matches
+		const validPartialMatches = (parsed.partialMatches || []).filter((match: PartialMatch) => {
+			// Verify local issue exists and is not already closed
+			const localIssue = localIssues.find((i) => i.id === match.localIssueId);
+			if (!localIssue || localIssue.status === 'closed') return false;
+
+			// Don't suggest partial if already a complete match
+			if (validMatches.some((m: SyncResult['matches'][0]) => m.localIssueId === match.localIssueId)) {
+				return false;
+			}
+
+			// Verify at least one matched external issue exists
+			if (!match.matchedExternalIssues || match.matchedExternalIssues.length === 0) {
+				return false;
+			}
+
+			// Verify the matched external issues actually exist
+			const hasValidExternal = match.matchedExternalIssues.some((ext) =>
+				externalIssues.some((i) => i.id === ext.id)
+			);
+			if (!hasValidExternal) return false;
+
+			return match.confidence >= 0.6;
+		});
+
+		const summary = parsed.summary ||
+			`Found ${validMatches.length} complete match${validMatches.length !== 1 ? 'es' : ''} and ${validPartialMatches.length} partial match${validPartialMatches.length !== 1 ? 'es' : ''}.`;
+
 		return json({
 			projectName,
 			projectPath,
@@ -192,7 +267,8 @@ Respond in JSON:
 				closed: closedExternal
 			},
 			matches: validMatches,
-			summary: parsed.summary || `Found ${validMatches.length} matching issues to sync.`
+			partialMatches: validPartialMatches,
+			summary
 		} as SyncResult);
 	} catch (error) {
 		console.error('Error syncing project:', error);

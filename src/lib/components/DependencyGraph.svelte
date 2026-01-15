@@ -12,11 +12,25 @@
 	let { focusId = null, focusedIssueId = $bindable<string | null>(null) }: Props = $props();
 
 	// Layout constants
-	const NODE_WIDTH = 200;
-	const NODE_HEIGHT = 60;
-	const HORIZONTAL_GAP = 80;
+	const NODE_WIDTH = 320;
+	const NODE_MIN_HEIGHT = 60;
+	const NODE_HEADER_HEIGHT = 48; // Title + metadata
+	const DESC_LINE_HEIGHT = 14;
+	const DESC_CHARS_PER_LINE = 48;
+	const DESC_MAX_LINES = 8;
+	const HORIZONTAL_GAP = 100;
 	const VERTICAL_GAP = 40;
 	const PADDING = 80;
+
+	// Calculate node height based on description
+	function getNodeHeight(issue: Issue): number {
+		if (!issue.description || issue.description.trim().length === 0) {
+			return NODE_MIN_HEIGHT;
+		}
+		const desc = issue.description.replace(/\n/g, ' ').trim();
+		const numLines = Math.min(Math.ceil(desc.length / DESC_CHARS_PER_LINE), DESC_MAX_LINES);
+		return NODE_HEADER_HEIGHT + numLines * DESC_LINE_HEIGHT + 12; // 12px padding
+	}
 
 	// Filter state
 	let showClosed = $state(false);
@@ -96,6 +110,7 @@
 		issue: Issue;
 		x: number;
 		y: number;
+		height: number;
 		layer: number;
 		order: number;
 	}
@@ -238,10 +253,34 @@
 		const layers = calculateLayers(issues);
 		const orders = orderNodesInLayers(issues, layers);
 
+		// Group issues by layer and sort by order
+		const layerGroups = new Map<number, Issue[]>();
+		issues.forEach((issue) => {
+			const layer = layers.get(issue.id) ?? 0;
+			if (!layerGroups.has(layer)) layerGroups.set(layer, []);
+			layerGroups.get(layer)!.push(issue);
+		});
+
+		// Sort each layer group by order
+		layerGroups.forEach((group) => {
+			group.sort((a, b) => (orders.get(a.id) ?? 0) - (orders.get(b.id) ?? 0));
+		});
+
+		// Calculate y positions based on cumulative heights
+		const yPositions = new Map<string, number>();
+		layerGroups.forEach((group) => {
+			let currentY = PADDING;
+			for (const issue of group) {
+				yPositions.set(issue.id, currentY);
+				currentY += getNodeHeight(issue) + VERTICAL_GAP;
+			}
+		});
+
 		return issues.map((issue) => ({
 			issue,
 			x: PADDING + (layers.get(issue.id) ?? 0) * (NODE_WIDTH + HORIZONTAL_GAP),
-			y: PADDING + (orders.get(issue.id) ?? 0) * (NODE_HEIGHT + VERTICAL_GAP),
+			y: yPositions.get(issue.id) ?? PADDING,
+			height: getNodeHeight(issue),
 			layer: layers.get(issue.id) ?? 0,
 			order: orders.get(issue.id) ?? 0
 		}));
@@ -271,12 +310,13 @@
 
 	let svgHeight = $derived.by(() => {
 		if (positions.length === 0) return 500;
-		const layerCounts: Record<number, number> = {};
+		// Find max y + height across all nodes
+		let maxBottom = 0;
 		positions.forEach((p) => {
-			layerCounts[p.layer] = (layerCounts[p.layer] || 0) + 1;
+			const bottom = p.y + p.height;
+			if (bottom > maxBottom) maxBottom = bottom;
 		});
-		const maxNodesInLayer = Math.max(...Object.values(layerCounts), 1);
-		return PADDING * 2 + maxNodesInLayer * (NODE_HEIGHT + VERTICAL_GAP);
+		return maxBottom + PADDING;
 	});
 
 	function getPosition(id: string): NodePosition | undefined {
@@ -726,9 +766,9 @@
 						{@const depPos = getPosition(depId)}
 						{#if depPos}
 							{@const startX = depPos.x + NODE_WIDTH}
-							{@const startY = depPos.y + NODE_HEIGHT / 2}
+							{@const startY = depPos.y + depPos.height / 2}
 							{@const endX = pos.x}
-							{@const endY = pos.y + NODE_HEIGHT / 2}
+							{@const endY = pos.y + pos.height / 2}
 							{@const midX = (startX + endX) / 2}
 							{@const isHighlighted = focusedIssueId === pos.issue.id || focusedIssueId === depId}
 							{@const importance = issueStore.getBlockerImportance(depId)}
@@ -753,9 +793,9 @@
 					{@const targetPos = getPosition(suggestion.targetId)}
 					{#if focusedPos && targetPos}
 						{@const startX = targetPos.x + NODE_WIDTH}
-						{@const startY = targetPos.y + NODE_HEIGHT / 2}
+						{@const startY = targetPos.y + targetPos.height / 2}
 						{@const endX = focusedPos.x}
-						{@const endY = focusedPos.y + NODE_HEIGHT / 2}
+						{@const endY = focusedPos.y + focusedPos.height / 2}
 						{@const midX = (startX + endX) / 2}
 						<path
 							d="M {startX} {startY} C {midX} {startY}, {midX} {endY}, {endX} {endY}"
@@ -797,7 +837,7 @@
 								x="-6"
 								y="-6"
 								width={NODE_WIDTH + 12}
-								height={NODE_HEIGHT + 12}
+								height={pos.height + 12}
 								rx="14"
 								fill="none"
 								stroke="#ef4444"
@@ -813,7 +853,7 @@
 								x="-4"
 								y="-4"
 								width={NODE_WIDTH + 8}
-								height={NODE_HEIGHT + 8}
+								height={pos.height + 8}
 								rx="12"
 								fill="none"
 								stroke="#3b82f6"
@@ -827,7 +867,7 @@
 								x="-4"
 								y="-4"
 								width={NODE_WIDTH + 8}
-								height={NODE_HEIGHT + 8}
+								height={pos.height + 8}
 								rx="12"
 								fill="none"
 								stroke="#9333ea"
@@ -841,7 +881,7 @@
 						<!-- Main node rectangle -->
 						<rect
 							width={NODE_WIDTH}
-							height={NODE_HEIGHT}
+							height={pos.height}
 							rx="10"
 							fill={isSuggested ? '#faf5ff' : needsHuman ? '#fef2f2' : statusBg}
 							stroke={needsHuman ? '#ef4444' : isFocused ? '#3b82f6' : isSuggested ? '#9333ea' : statusColor}
@@ -850,17 +890,40 @@
 						/>
 
 						<!-- Status indicator -->
-						<circle cx="16" cy={NODE_HEIGHT / 2} r="5" fill={statusColor} />
+						<circle cx="16" cy="20" r="5" fill={statusColor} />
 
 						<!-- Title -->
-						<text x="30" y={NODE_HEIGHT / 2 - 6} font-size="13" font-weight="600" fill="#1f2937">
-							{pos.issue.title.length > 20 ? pos.issue.title.slice(0, 20) + '…' : pos.issue.title}
+						<text x="30" y="24" font-size="13" font-weight="600" fill="#1f2937">
+							{pos.issue.title.length > 30 ? pos.issue.title.slice(0, 30) + '…' : pos.issue.title}
 						</text>
 
 						<!-- Metadata -->
-						<text x="30" y={NODE_HEIGHT / 2 + 12} font-size="11" fill="#6b7280">
+						<text x="30" y="40" font-size="11" fill="#6b7280">
 							P{pos.issue.priority} · {pos.issue.status.replace('_', ' ')}
 						</text>
+
+						<!-- Description (truncated, wrapped - up to 6 lines) -->
+						{#if pos.issue.description}
+							{@const desc = pos.issue.description.replace(/\n/g, ' ').trim()}
+							{@const charsPerLine = 50}
+							{@const maxLines = 6}
+							{@const lines = []}
+							{#each Array(maxLines) as _, i}
+								{@const start = i * charsPerLine}
+								{@const end = (i + 1) * charsPerLine}
+								{@const isLast = i === maxLines - 1 || end >= desc.length}
+								{@const lineText = desc.slice(start, end)}
+								{#if lineText}
+									<text x="12" y={58 + i * 14} font-size="11" fill="#6b7280">
+										{lineText}{isLast && desc.length > end ? '…' : ''}
+									</text>
+								{/if}
+							{/each}
+						{:else}
+							<text x="12" y="58" font-size="11" fill="#d1d5db" font-style="italic">
+								No description
+							</text>
+						{/if}
 
 						<!-- AI Assignment badge (top-right) -->
 						{#if hasAI && aiColor}

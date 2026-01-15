@@ -7,6 +7,7 @@
 	import DependencyGraph from '$lib/components/DependencyGraph.svelte';
 	import GraphChatSidebar from '$lib/components/GraphChatSidebar.svelte';
 	import ProjectSelector from '$lib/components/ProjectSelector.svelte';
+	import DependencyManager from '$lib/components/DependencyManager.svelte';
 	import { graphChatStore } from '$lib/stores/graphChat.svelte';
 	import type { IssueStatus } from '$lib/types/issue';
 
@@ -16,6 +17,9 @@
 	// Chat sidebar state
 	let chatOpen = $state(false);
 	let focusedIssueId = $state<string | null>(initialFocusId);
+
+	// Dependency manager state
+	let depManagerOpen = $state(false);
 
 	// Update focused issue when initialFocusId changes
 	$effect(() => {
@@ -116,6 +120,18 @@
 
 			<!-- Project Selector -->
 			<ProjectSelector />
+
+			<!-- Dependency Manager -->
+			<button
+				onclick={() => depManagerOpen = true}
+				class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+				title="Manage dependency relationships"
+			>
+				<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+				</svg>
+				<span>Dependencies</span>
+			</button>
 		</div>
 
 		<div class="text-sm text-gray-500">
@@ -266,3 +282,6 @@
 		</div>
 	{/if}
 </div>
+
+<!-- Dependency Manager Modal -->
+<DependencyManager isOpen={depManagerOpen} onClose={() => depManagerOpen = false} />
