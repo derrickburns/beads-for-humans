@@ -6,6 +6,38 @@ export interface AIModel {
 	provider: string; // Display name of the provider
 }
 
+// Preset types for simplified selection
+export type PresetType = 'quick' | 'balanced' | 'thorough';
+
+export interface Preset {
+	type: PresetType;
+	name: string;
+	description: string;
+	modelId: string;
+}
+
+// User-friendly presets
+export const PRESETS: Preset[] = [
+	{
+		type: 'quick',
+		name: 'Quick',
+		description: 'Fast responses, lower cost. Best for simple tasks.',
+		modelId: 'anthropic/claude-3.5-haiku'
+	},
+	{
+		type: 'balanced',
+		name: 'Balanced',
+		description: 'Good balance of speed and quality. Recommended.',
+		modelId: 'openai/gpt-4o'
+	},
+	{
+		type: 'thorough',
+		name: 'Thorough',
+		description: 'Highest quality, takes longer. Best for complex tasks.',
+		modelId: 'anthropic/claude-sonnet-4'
+	}
+];
+
 // Popular models available on OpenRouter
 export const AVAILABLE_MODELS: AIModel[] = [
 	// Anthropic
@@ -124,6 +156,18 @@ function createAISettingsStore() {
 		},
 		get isConfigured() {
 			return serverConfigured || !!settings.apiKey;
+		},
+		get currentPreset(): PresetType | null {
+			const preset = PRESETS.find((p) => p.modelId === settings.model);
+			return preset?.type ?? null;
+		},
+
+		setPreset(presetType: PresetType) {
+			const preset = PRESETS.find((p) => p.type === presetType);
+			if (preset) {
+				settings.model = preset.modelId;
+				saveSettings(settings);
+			}
 		},
 
 		setModel(modelId: string) {

@@ -1,15 +1,16 @@
 <script lang="ts">
-	import { aiSettings, AVAILABLE_MODELS } from '$lib/stores/aiSettings.svelte';
+	import { aiSettings, AVAILABLE_MODELS, PRESETS, type PresetType } from '$lib/stores/aiSettings.svelte';
 	import { toFriendlyError, type FriendlyError } from '$lib/utils/errors';
 
 	let isOpen = $state(false);
 	let showSetup = $state(false);
+	let showAdvanced = $state(false);
 	let apiKeyInput = $state('');
 	let testingKey = $state(false);
 	let testError = $state<FriendlyError | null>(null);
 	let testSuccess = $state(false);
 
-	// Group models by provider for better UX
+	// Group models by provider for advanced view
 	const modelsByProvider = $derived(() => {
 		const groups: Record<string, typeof AVAILABLE_MODELS> = {};
 		for (const model of AVAILABLE_MODELS) {
@@ -20,6 +21,12 @@
 		}
 		return groups;
 	});
+
+	const presetIcons: Record<PresetType, string> = {
+		quick: '⚡',
+		balanced: '⚖️',
+		thorough: '🎯'
+	};
 
 	function handleModelChange(e: Event) {
 		const target = e.target as HTMLSelectElement;
@@ -118,6 +125,9 @@
 		<span class="hidden sm:inline truncate max-w-[120px]">
 			{#if aiSettings.status === 'not-configured'}
 				Setup AI
+			{:else if aiSettings.currentPreset}
+				{@const preset = PRESETS.find(p => p.type === aiSettings.currentPreset)}
+				{presetIcons[aiSettings.currentPreset]} {preset?.name || 'AI'}
 			{:else}
 				{aiSettings.currentModel.name}
 			{/if}
@@ -158,29 +168,74 @@
 					</p>
 				</div>
 			{:else}
-				<!-- Model selection -->
+				<!-- Preset selection -->
 				<div class="space-y-3">
 					<div>
-						<label for="model-select" class="block text-xs font-medium text-gray-500 mb-1">AI Model</label>
-						<select
-							id="model-select"
-							value={aiSettings.model}
-							onchange={handleModelChange}
-							class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-						>
-							{#each Object.entries(modelsByProvider()) as [provider, models]}
-								<optgroup label={provider}>
-									{#each models as model}
-										<option value={model.id}>{model.name}</option>
-									{/each}
-								</optgroup>
+						<span class="block text-xs font-medium text-gray-500 mb-2">AI Quality</span>
+						<div class="grid grid-cols-3 gap-2">
+							{#each PRESETS as preset}
+								{@const isSelected = aiSettings.currentPreset === preset.type}
+								<button
+									onclick={() => aiSettings.setPreset(preset.type)}
+									class="flex flex-col items-center p-2 rounded-lg border-2 transition-all {
+										isSelected
+											? 'border-blue-500 bg-blue-50'
+											: 'border-gray-200 hover:border-gray-300 bg-white'
+									}"
+								>
+									<span class="text-lg mb-0.5">{presetIcons[preset.type]}</span>
+									<span class="text-xs font-medium {isSelected ? 'text-blue-700' : 'text-gray-700'}">{preset.name}</span>
+								</button>
 							{/each}
-						</select>
+						</div>
+						{#if aiSettings.currentPreset}
+							{@const currentPreset = PRESETS.find(p => p.type === aiSettings.currentPreset)}
+							{#if currentPreset}
+								<p class="text-xs text-gray-500 mt-2">{currentPreset.description}</p>
+							{/if}
+						{:else}
+							<p class="text-xs text-gray-500 mt-2">Using custom model: {aiSettings.currentModel.name}</p>
+						{/if}
 					</div>
 
-					<p class="text-xs text-gray-500">
-						{aiSettings.currentModel.provider} · {aiSettings.currentModel.name}
-					</p>
+					<!-- Advanced toggle -->
+					<button
+						onclick={() => showAdvanced = !showAdvanced}
+						class="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+					>
+						<svg
+							class="w-3 h-3 transition-transform {showAdvanced ? 'rotate-90' : ''}"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke="currentColor"
+						>
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+						</svg>
+						<span>Advanced</span>
+					</button>
+
+					{#if showAdvanced}
+						<div class="pt-2 border-t border-gray-100">
+							<label for="model-select" class="block text-xs font-medium text-gray-500 mb-1">Custom Model</label>
+							<select
+								id="model-select"
+								value={aiSettings.model}
+								onchange={handleModelChange}
+								class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+							>
+								{#each Object.entries(modelsByProvider()) as [provider, models]}
+									<optgroup label={provider}>
+										{#each models as model}
+											<option value={model.id}>{model.name}</option>
+										{/each}
+									</optgroup>
+								{/each}
+							</select>
+							<p class="text-xs text-gray-400 mt-1">
+								{aiSettings.currentModel.provider} · {aiSettings.currentModel.name}
+							</p>
+						</div>
+					{/if}
 
 					{#if aiSettings.status === 'client-key'}
 						<p class="text-xs text-blue-600">
