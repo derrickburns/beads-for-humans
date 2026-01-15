@@ -17,10 +17,53 @@ function generateId(): string {
 	return crypto.randomUUID();
 }
 
+// Validate and repair issues loaded from storage
+function validateLoadedIssues(issues: Issue[]): Issue[] {
+	const validIds = new Set(issues.map(i => i.id));
+	const validStatuses: IssueStatus[] = ['open', 'in_progress', 'closed'];
+	const validTypes: IssueType[] = ['task', 'bug', 'feature'];
+	const validExecutionTypes: ExecutionType[] = ['human', 'ai_assisted', 'human_assisted', 'automated'];
+
+	return issues.map(issue => {
+		// Filter out invalid dependencies
+		const validDeps = (issue.dependencies || []).filter(depId => validIds.has(depId));
+
+		// Clamp priority to valid range
+		const priority = Math.max(0, Math.min(4, issue.priority ?? 2)) as IssuePriority;
+
+		// Validate status
+		const status = validStatuses.includes(issue.status) ? issue.status : 'open';
+
+		// Validate type
+		const type = validTypes.includes(issue.type) ? issue.type : 'task';
+
+		// Validate execution type
+		const executionType = issue.executionType && validExecutionTypes.includes(issue.executionType)
+			? issue.executionType
+			: undefined;
+
+		return {
+			...issue,
+			dependencies: validDeps,
+			priority,
+			status,
+			type,
+			executionType
+		};
+	});
+}
+
 function loadIssues(): Issue[] {
 	if (!browser) return [];
-	const stored = localStorage.getItem(STORAGE_KEY);
-	return stored ? JSON.parse(stored) : [];
+	try {
+		const stored = localStorage.getItem(STORAGE_KEY);
+		if (!stored) return [];
+		const parsed = JSON.parse(stored) as Issue[];
+		return validateLoadedIssues(parsed);
+	} catch (e) {
+		console.error('Failed to load issues from storage:', e);
+		return [];
+	}
 }
 
 function saveIssues(issues: Issue[]): void {
@@ -107,18 +150,37 @@ class IssueStore {
 			return undefined;
 		}
 
+		// Validate and filter dependencies
+		const validIds = new Set(this.issues.map(i => i.id));
+		const validDependencies = (data.dependencies ?? []).filter(depId => {
+			if (!validIds.has(depId)) {
+				console.warn(`Ignoring invalid dependency "${depId}" on create - issue does not exist`);
+				return false;
+			}
+			return true;
+		});
+
+		// Validate priority (clamp to 0-4)
+		const priority = Math.max(0, Math.min(4, data.priority)) as IssuePriority;
+
+		// Validate execution type
+		const validExecutionTypes: ExecutionType[] = ['human', 'ai_assisted', 'human_assisted', 'automated'];
+		const executionType = data.executionType && validExecutionTypes.includes(data.executionType)
+			? data.executionType
+			: undefined;
+
 		const now = new Date().toISOString();
 		const issue: Issue = {
 			id: generateId(),
 			title: data.title,
 			description: data.description,
 			status: 'open',
-			priority: data.priority,
+			priority,
 			type: data.type,
 			createdAt: now,
 			updatedAt: now,
-			dependencies: data.dependencies ?? [],
-			executionType: data.executionType,
+			dependencies: validDependencies,
+			executionType,
 			validationRequired: data.validationRequired,
 			aiConfidence: data.aiConfidence,
 			executionReason: data.executionReason
@@ -131,6 +193,39 @@ class IssueStore {
 	update(id: string, updates: Partial<Omit<Issue, 'id' | 'createdAt'>>): Issue | undefined {
 		const index = this.issues.findIndex((i) => i.id === id);
 		if (index === -1) return undefined;
+
+		// Validate dependencies if provided
+		if (updates.dependencies) {
+			// Filter out invalid dependency IDs
+			const validIds = new Set(this.issues.map(i => i.id));
+			updates.dependencies = updates.dependencies.filter(depId => {
+				if (!validIds.has(depId)) {
+					console.warn(`Ignoring invalid dependency "${depId}" - issue does not exist`);
+					return false;
+				}
+				if (depId === id) {
+					console.warn(`Ignoring self-dependency`);
+					return false;
+				}
+				return true;
+			});
+
+			// Check for cycles with the new dependencies
+			for (const depId of updates.dependencies) {
+				if (!this.issues[index].dependencies.includes(depId)) {
+					// This is a new dependency - check for cycle
+					if (this.wouldCreateCycle(id, depId)) {
+						console.warn(`Ignoring dependency "${depId}" - would create cycle`);
+						updates.dependencies = updates.dependencies.filter(d => d !== depId);
+					}
+				}
+			}
+		}
+
+		// Validate priority if provided
+		if (updates.priority !== undefined) {
+			updates.priority = Math.max(0, Math.min(4, updates.priority)) as IssuePriority;
+		}
 
 		const updated = {
 			...this.issues[index],
