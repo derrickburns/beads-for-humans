@@ -109,6 +109,16 @@
 	let wasPanning = $state(false);
 	let panStartPos = $state<{ x: number; y: number } | null>(null);
 
+	// Drag-to-connect state for creating dependencies
+	let dragConnect = $state<{
+		fromId: string;
+		fromX: number;
+		fromY: number;
+		toX: number;
+		toY: number;
+	} | null>(null);
+	let dragOverNodeId = $state<string | null>(null);
+
 	function handleBackgroundDoubleClick(e: MouseEvent) {
 		// Don't create if we were panning
 		if (wasPanning) return;
@@ -146,6 +156,84 @@
 		}
 
 		closeInlineCreate();
+	}
+
+	// Drag-to-connect handlers
+	function startDragConnect(e: MouseEvent, issueId: string, nodeX: number, nodeY: number, nodeHeight: number) {
+		e.stopPropagation();
+		e.preventDefault();
+
+		// Get SVG element to compute coordinates
+		const svg = (e.target as Element).closest('svg');
+		if (!svg) return;
+
+		const rect = svg.getBoundingClientRect();
+		const svgX = nodeX + NODE_WIDTH;
+		const svgY = nodeY + nodeHeight / 2;
+
+		dragConnect = {
+			fromId: issueId,
+			fromX: svgX,
+			fromY: svgY,
+			toX: svgX,
+			toY: svgY
+		};
+
+		// Add window listeners for drag
+		window.addEventListener('mousemove', handleDragConnectMove);
+		window.addEventListener('mouseup', handleDragConnectEnd);
+	}
+
+	function handleDragConnectMove(e: MouseEvent) {
+		if (!dragConnect) return;
+
+		const svg = document.querySelector('.dependency-graph-svg');
+		if (!svg) return;
+
+		const rect = svg.getBoundingClientRect();
+		// Convert screen coords to SVG coords accounting for pan and scale
+		const svgX = (e.clientX - rect.left - panX) / scale;
+		const svgY = (e.clientY - rect.top - panY) / scale;
+
+		dragConnect = {
+			...dragConnect,
+			toX: svgX,
+			toY: svgY
+		};
+
+		// Check if we're over a node
+		dragOverNodeId = null;
+		for (const pos of positions) {
+			if (pos.issue.id === dragConnect.fromId) continue; // Can't connect to self
+
+			if (
+				svgX >= pos.x &&
+				svgX <= pos.x + NODE_WIDTH &&
+				svgY >= pos.y &&
+				svgY <= pos.y + pos.height
+			) {
+				dragOverNodeId = pos.issue.id;
+				break;
+			}
+		}
+	}
+
+	function handleDragConnectEnd() {
+		window.removeEventListener('mousemove', handleDragConnectMove);
+		window.removeEventListener('mouseup', handleDragConnectEnd);
+
+		if (dragConnect && dragOverNodeId) {
+			// Create dependency: fromId depends on dragOverNodeId
+			// (fromId → dragOverNodeId means dragOverNodeId must be done first)
+			const result = issueStore.addDependency(dragConnect.fromId, dragOverNodeId);
+			if (result.error) {
+				errorMessage = result.error;
+				setTimeout(() => (errorMessage = null), 3000);
+			}
+		}
+
+		dragConnect = null;
+		dragOverNodeId = null;
 	}
 
 	// Sync focusedIssueId when focusId prop changes
@@ -832,6 +920,7 @@
 			</div>
 		{:else}
 			<svg
+				class="dependency-graph-svg"
 				width="100%"
 				height="600"
 				viewBox="0 0 {svgWidth} {svgHeight}"
@@ -846,6 +935,9 @@
 					</marker>
 					<marker id="arrowhead-purple" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
 						<polygon points="0 0, 10 3.5, 0 7" fill="#9333ea" />
+					</marker>
+					<marker id="arrowhead-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+						<polygon points="0 0, 10 3.5, 0 7" fill="#22c55e" />
 					</marker>
 				</defs>
 
@@ -898,6 +990,20 @@
 					{/if}
 				{/each}
 
+				<!-- Drag-to-connect preview line -->
+				{#if dragConnect}
+					{@const midX = (dragConnect.fromX + dragConnect.toX) / 2}
+					<path
+						d="M {dragConnect.fromX} {dragConnect.fromY} C {midX} {dragConnect.fromY}, {midX} {dragConnect.toY}, {dragConnect.toX} {dragConnect.toY}"
+						fill="none"
+						stroke={dragOverNodeId ? '#22c55e' : '#9ca3af'}
+						stroke-width="3"
+						stroke-dasharray={dragOverNodeId ? 'none' : '6,4'}
+						marker-end={dragOverNodeId ? 'url(#arrowhead-green)' : 'url(#arrowhead)'}
+						class="pointer-events-none"
+					/>
+				{/if}
+
 				<!-- Nodes -->
 				{#each positions as pos}
 					{@const isBlocked = issueStore.getBlockers(pos.issue.id).length > 0}
@@ -908,6 +1014,8 @@
 					{@const hasAI = !!pos.issue.aiAssignment}
 					{@const needsHuman = !!pos.issue.needsHuman}
 					{@const aiColor = hasAI ? getModelColor(pos.issue.aiAssignment!.modelId) : null}
+					{@const isDragTarget = dragOverNodeId === pos.issue.id}
+					{@const isDragSource = dragConnect?.fromId === pos.issue.id}
 					<g
 						transform="translate({pos.x}, {pos.y})"
 						onclick={(e) => handleNodeClick(e, pos.issue.id)}
@@ -1057,6 +1165,41 @@
 								<text x="12" y="16" font-size="10" fill="white" text-anchor="middle" font-weight="bold">AI</text>
 							</g>
 						{/if}
+
+						<!-- Drag-to-connect handle (right edge) -->
+						<g
+							class="connector-handle"
+							transform="translate({NODE_WIDTH}, {pos.height / 2})"
+							onmousedown={(e) => startDragConnect(e, pos.issue.id, pos.x, pos.y, pos.height)}
+							style="cursor: crosshair;"
+						>
+							<!-- Invisible larger hit area -->
+							<circle
+								cx="0"
+								cy="0"
+								r="14"
+								fill="transparent"
+							/>
+							<!-- Visible handle -->
+							<circle
+								cx="0"
+								cy="0"
+								r={isDragTarget ? 10 : isDragSource ? 8 : 6}
+								fill={isDragTarget ? '#22c55e' : isDragSource ? '#3b82f6' : '#e5e7eb'}
+								stroke={isDragTarget ? '#16a34a' : isDragSource ? '#2563eb' : '#9ca3af'}
+								stroke-width="2"
+							/>
+							<!-- Arrow icon indicating direction -->
+							{#if !isDragTarget && !isDragSource}
+								<text x="0" y="4" font-size="10" fill="#6b7280" text-anchor="middle">→</text>
+							{/if}
+							{#if isDragTarget}
+								<text x="0" y="4" font-size="12" fill="white" text-anchor="middle" font-weight="bold">+</text>
+							{/if}
+							{#if isDragSource}
+								<circle cx="0" cy="0" r="3" fill="white" />
+							{/if}
+						</g>
 					</g>
 				{/each}
 			</svg>
@@ -1144,7 +1287,7 @@
 
 	<!-- Help text -->
 	<div class="text-center text-sm text-gray-400 pt-2">
-		Click to select · Double-click node to edit · Double-click empty space to create · Scroll to zoom · Drag to pan · Right-click for menu
+		Click to select · Double-click node to edit · <span class="text-green-600">Drag → to connect</span> · Double-click empty space to create · Scroll to zoom · Drag to pan · Right-click for menu
 		{#if !focusedIssueId}
 			· <span class="text-purple-600">Select an issue to see AI suggestions</span>
 		{/if}
