@@ -1222,6 +1222,282 @@ class IssueStore {
 		const percentOver = expected > 0 ? (variance / expected) * 100 : 0;
 		return { variance, percentOver };
 	}
+
+	// ===== Scope Monitoring =====
+
+	// Get all issues under a goal (root issue)
+	getProjectScope(goalId: string): {
+		goal: Issue | undefined;
+		allIssues: Issue[];
+		leafCount: number;
+		containerCount: number;
+		totalEstimatedCost: number;
+	} {
+		const goal = this.getById(goalId);
+		const allIssues = this.getDescendants(goalId);
+		const leaves = allIssues.filter(i => this.isLeaf(i.id));
+		const containers = allIssues.filter(i => this.isContainer(i.id));
+		const totalEstimatedCost = allIssues.reduce(
+			(sum, i) => sum + (i.budgetEstimate?.expectedCost || 0),
+			0
+		);
+
+		return {
+			goal,
+			allIssues,
+			leafCount: leaves.length,
+			containerCount: containers.length,
+			totalEstimatedCost
+		};
+	}
+
+	// Detect scope expansion by comparing current state to original scope boundary
+	detectScopeExpansion(goalId: string): {
+		hasExpanded: boolean;
+		expansions: Array<{
+			issue: Issue;
+			reason: string;
+		}>;
+	} {
+		const goal = this.getById(goalId);
+		if (!goal?.scopeBoundary) {
+			return { hasExpanded: false, expansions: [] };
+		}
+
+		const boundary = goal.scopeBoundary;
+		const descendants = this.getDescendants(goalId);
+		const expansions: Array<{ issue: Issue; reason: string }> = [];
+
+		for (const issue of descendants) {
+			// Check if issue title/description mentions excluded items
+			const titleLower = issue.title.toLowerCase();
+			const descLower = (issue.description || '').toLowerCase();
+
+			for (const excluded of boundary.excludes) {
+				const excludedLower = excluded.toLowerCase();
+				if (titleLower.includes(excludedLower) || descLower.includes(excludedLower)) {
+					expansions.push({
+						issue,
+						reason: `References excluded scope: "${excluded}"`
+					});
+				}
+			}
+
+			// Check if issue violates boundary conditions
+			for (const condition of boundary.boundaryConditions) {
+				// Simple keyword check - in production, use AI for semantic matching
+				const conditionKeywords = condition.toLowerCase().split(/\s+/);
+				const violatesCondition = conditionKeywords.some(
+					kw => kw.length > 3 && (titleLower.includes(kw) || descLower.includes(kw))
+				);
+				if (violatesCondition) {
+					expansions.push({
+						issue,
+						reason: `May violate boundary: "${condition}"`
+					});
+				}
+			}
+		}
+
+		return {
+			hasExpanded: expansions.length > 0,
+			expansions
+		};
+	}
+
+	// Add a scope boundary to a goal
+	setScopeBoundary(
+		goalId: string,
+		boundary: ScopeBoundary
+	): Issue | undefined {
+		return this.update(goalId, { scopeBoundary: boundary });
+	}
+
+	// Add a constraint to an issue
+	addConstraint(
+		issueId: string,
+		constraint: Omit<Constraint, 'id' | 'createdAt'>
+	): Issue | undefined {
+		const issue = this.getById(issueId);
+		if (!issue) return undefined;
+
+		const newConstraint: Constraint = {
+			...constraint,
+			id: generateId(),
+			createdAt: new Date().toISOString()
+		};
+
+		const constraints = [...(issue.constraints || []), newConstraint];
+		return this.update(issueId, { constraints });
+	}
+
+	// Remove a constraint
+	removeConstraint(issueId: string, constraintId: string): Issue | undefined {
+		const issue = this.getById(issueId);
+		if (!issue?.constraints) return undefined;
+
+		const constraints = issue.constraints.filter(c => c.id !== constraintId);
+		return this.update(issueId, { constraints });
+	}
+
+	// Get all constraints for a goal (including inherited from ancestors)
+	getEffectiveConstraints(issueId: string): Constraint[] {
+		const constraints: Constraint[] = [];
+		const ancestors = [this.getById(issueId), ...this.getAncestors(issueId)];
+
+		for (const ancestor of ancestors) {
+			if (ancestor?.constraints) {
+				constraints.push(...ancestor.constraints);
+			}
+		}
+
+		return constraints;
+	}
+
+	// ===== Concern Management =====
+
+	// Add a concern to an issue
+	addConcern(
+		issueId: string,
+		concern: Omit<Concern, 'id' | 'surfacedAt' | 'status'>
+	): Issue | undefined {
+		const issue = this.getById(issueId);
+		if (!issue) return undefined;
+
+		// Calculate tier based on impact, probability, urgency
+		const priority = concern.impact * concern.probability * concern.urgency;
+		let tier: 1 | 2 | 3 | 4;
+		if (priority >= 18) tier = 1;      // Blocker
+		else if (priority >= 9) tier = 2;  // Critical
+		else if (priority >= 4) tier = 3;  // Consideration
+		else tier = 4;                      // Background
+
+		const newConcern: Concern = {
+			...concern,
+			id: generateId(),
+			tier,
+			surfacedAt: new Date().toISOString(),
+			status: 'open'
+		};
+
+		const concerns = [...(issue.concerns || []), newConcern];
+		return this.update(issueId, { concerns });
+	}
+
+	// Update concern status
+	updateConcernStatus(
+		issueId: string,
+		concernId: string,
+		status: Concern['status'],
+		resolution?: string
+	): Issue | undefined {
+		const issue = this.getById(issueId);
+		if (!issue?.concerns) return undefined;
+
+		const concerns = issue.concerns.map(c => {
+			if (c.id !== concernId) return c;
+			return {
+				...c,
+				status,
+				resolution,
+				addressedAt: status !== 'open' ? new Date().toISOString() : undefined
+			};
+		});
+
+		return this.update(issueId, { concerns });
+	}
+
+	// Get all open concerns for a goal and its descendants
+	getOpenConcerns(goalId: string): Array<{ issue: Issue; concern: Concern }> {
+		const issues = [this.getById(goalId), ...this.getDescendants(goalId)].filter(
+			(i): i is Issue => i !== undefined
+		);
+
+		const concerns: Array<{ issue: Issue; concern: Concern }> = [];
+		for (const issue of issues) {
+			for (const concern of issue.concerns || []) {
+				if (concern.status === 'open') {
+					concerns.push({ issue, concern });
+				}
+			}
+		}
+
+		// Sort by tier (1 = blocker, most important first)
+		return concerns.sort((a, b) => a.concern.tier - b.concern.tier);
+	}
+
+	// Get concerns by tier
+	getConcernsByTier(goalId: string): Record<1 | 2 | 3 | 4, Array<{ issue: Issue; concern: Concern }>> {
+		const allConcerns = this.getOpenConcerns(goalId);
+		return {
+			1: allConcerns.filter(c => c.concern.tier === 1),
+			2: allConcerns.filter(c => c.concern.tier === 2),
+			3: allConcerns.filter(c => c.concern.tier === 3),
+			4: allConcerns.filter(c => c.concern.tier === 4)
+		};
+	}
+
+	// ===== Plan Accuracy =====
+
+	// Check if an issue is well-specified (has success criteria)
+	isWellSpecified(issueId: string): boolean {
+		const issue = this.getById(issueId);
+		if (!issue) return false;
+
+		// Has explicit well-specified flag
+		if (issue.isWellSpecified !== undefined) return issue.isWellSpecified;
+
+		// Has success criteria
+		if (issue.successCriteria && issue.successCriteria.length > 0) return true;
+
+		// Has clear description (heuristic: >50 chars)
+		if (issue.description && issue.description.length > 50) return true;
+
+		return false;
+	}
+
+	// Check plan accuracy: all leaves must be well-specified
+	checkPlanAccuracy(goalId: string): {
+		isAccurate: boolean;
+		underspecifiedLeaves: Issue[];
+		missingDecomposition: Issue[];
+	} {
+		const descendants = this.getDescendants(goalId);
+		const leaves = descendants.filter(i => this.isLeaf(i.id));
+		const underspecifiedLeaves = leaves.filter(i => !this.isWellSpecified(i.id));
+
+		// Find containers that might need further decomposition
+		// (e.g., single vague child, or children that don't cover parent's scope)
+		const missingDecomposition: Issue[] = [];
+		for (const issue of descendants) {
+			if (this.isContainer(issue.id)) {
+				const children = this.getChildren(issue.id);
+				// Heuristic: container with only 1 child might need more breakdown
+				if (children.length === 1 && !this.isWellSpecified(children[0].id)) {
+					missingDecomposition.push(issue);
+				}
+			}
+		}
+
+		return {
+			isAccurate: underspecifiedLeaves.length === 0 && missingDecomposition.length === 0,
+			underspecifiedLeaves,
+			missingDecomposition
+		};
+	}
+
+	// Set success criteria for an issue
+	setSuccessCriteria(issueId: string, criteria: string[]): Issue | undefined {
+		return this.update(issueId, {
+			successCriteria: criteria,
+			isWellSpecified: criteria.length > 0
+		});
+	}
+}
+
+// Helper to generate IDs (expose for constraint/concern creation)
+function generateId(): string {
+	return crypto.randomUUID();
 }
 
 export const issueStore = new IssueStore();
