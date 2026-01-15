@@ -5,10 +5,14 @@ import type {
 	IssuePriority,
 	IssueType,
 	ExecutionType,
+	DecompositionType,
 	AIAssignment,
 	NeedsHumanTrigger,
 	BudgetEstimate,
-	ActualCost
+	ActualCost,
+	Concern,
+	Constraint,
+	ScopeBoundary
 } from '$lib/types/issue';
 
 const STORAGE_KEY = 'issues';
@@ -20,9 +24,10 @@ function generateId(): string {
 // Validate and repair issues loaded from storage
 function validateLoadedIssues(issues: Issue[]): Issue[] {
 	const validIds = new Set(issues.map(i => i.id));
-	const validStatuses: IssueStatus[] = ['open', 'in_progress', 'closed'];
-	const validTypes: IssueType[] = ['task', 'bug', 'feature'];
+	const validStatuses: IssueStatus[] = ['open', 'in_progress', 'closed', 'failed'];
+	const validTypes: IssueType[] = ['goal', 'task', 'assumption', 'risk', 'contingency', 'question', 'constraint', 'bug', 'feature'];
 	const validExecutionTypes: ExecutionType[] = ['human', 'ai_assisted', 'human_assisted', 'automated'];
+	const validDecompositionTypes: DecompositionType[] = ['and', 'or_fallback', 'or_race', 'choice'];
 
 	return issues.map(issue => {
 		// Filter out invalid dependencies
@@ -42,13 +47,25 @@ function validateLoadedIssues(issues: Issue[]): Issue[] {
 			? issue.executionType
 			: undefined;
 
+		// Validate parent ID (must exist)
+		const parentId = issue.parentId && validIds.has(issue.parentId)
+			? issue.parentId
+			: undefined;
+
+		// Validate decomposition type
+		const decompositionType = issue.decompositionType && validDecompositionTypes.includes(issue.decompositionType)
+			? issue.decompositionType
+			: undefined;
+
 		return {
 			...issue,
 			dependencies: validDeps,
 			priority,
 			status,
 			type,
-			executionType
+			executionType,
+			parentId,
+			decompositionType
 		};
 	});
 }
@@ -80,7 +97,8 @@ class IssueStore {
 		return {
 			open: this.issues.filter((i) => i.status === 'open'),
 			in_progress: this.issues.filter((i) => i.status === 'in_progress'),
-			closed: this.issues.filter((i) => i.status === 'closed')
+			closed: this.issues.filter((i) => i.status === 'closed'),
+			failed: this.issues.filter((i) => i.status === 'failed')
 		};
 	}
 
@@ -124,6 +142,213 @@ class IssueStore {
 
 	getById(id: string): Issue | undefined {
 		return this.issues.find((i) => i.id === id);
+	}
+
+	// ===== Parent-Child Hierarchy =====
+
+	// Get all children of an issue
+	getChildren(issueId: string): Issue[] {
+		return this.issues.filter(i => i.parentId === issueId);
+	}
+
+	// Get all descendants (children, grandchildren, etc.)
+	getDescendants(issueId: string): Issue[] {
+		const descendants: Issue[] = [];
+		const queue = [issueId];
+
+		while (queue.length > 0) {
+			const currentId = queue.shift()!;
+			const children = this.getChildren(currentId);
+			for (const child of children) {
+				descendants.push(child);
+				queue.push(child.id);
+			}
+		}
+		return descendants;
+	}
+
+	// Get the parent issue
+	getParent(issueId: string): Issue | undefined {
+		const issue = this.getById(issueId);
+		if (!issue?.parentId) return undefined;
+		return this.getById(issue.parentId);
+	}
+
+	// Get all ancestors (parent, grandparent, etc.)
+	getAncestors(issueId: string): Issue[] {
+		const ancestors: Issue[] = [];
+		let current = this.getParent(issueId);
+		while (current) {
+			ancestors.push(current);
+			current = this.getParent(current.id);
+		}
+		return ancestors;
+	}
+
+	// Get root issues (no parent)
+	get roots(): Issue[] {
+		return this.issues.filter(i => !i.parentId);
+	}
+
+	// Check if issue is a container (has children)
+	isContainer(issueId: string): boolean {
+		return this.getChildren(issueId).length > 0;
+	}
+
+	// Check if issue is a leaf (no children)
+	isLeaf(issueId: string): boolean {
+		return this.getChildren(issueId).length === 0;
+	}
+
+	// Get all leaf issues (workable units)
+	get leaves(): Issue[] {
+		return this.issues.filter(i => this.isLeaf(i.id));
+	}
+
+	// Get derived status for a container based on children
+	getDerivedStatus(issueId: string): IssueStatus {
+		const children = this.getChildren(issueId);
+		if (children.length === 0) {
+			// Not a container, return actual status
+			return this.getById(issueId)?.status || 'open';
+		}
+
+		const issue = this.getById(issueId);
+		const decompositionType = issue?.decompositionType || 'and';
+
+		if (decompositionType === 'and') {
+			// AND: all must complete
+			const allClosed = children.every(c => this.getDerivedStatus(c.id) === 'closed');
+			if (allClosed) return 'closed';
+
+			const anyFailed = children.some(c => this.getDerivedStatus(c.id) === 'failed');
+			if (anyFailed) return 'failed';
+
+			const anyInProgress = children.some(c =>
+				['in_progress', 'closed'].includes(this.getDerivedStatus(c.id))
+			);
+			if (anyInProgress) return 'in_progress';
+
+			return 'open';
+		}
+
+		if (decompositionType === 'or_fallback' || decompositionType === 'or_race') {
+			// OR: any success = success
+			const anyClosed = children.some(c => this.getDerivedStatus(c.id) === 'closed');
+			if (anyClosed) return 'closed';
+
+			const allFailed = children.every(c => this.getDerivedStatus(c.id) === 'failed');
+			if (allFailed) return 'failed';
+
+			const anyInProgress = children.some(c =>
+				this.getDerivedStatus(c.id) === 'in_progress'
+			);
+			if (anyInProgress) return 'in_progress';
+
+			return 'open';
+		}
+
+		if (decompositionType === 'choice') {
+			// Choice: check if decision made (one child marked as chosen)
+			// For now, treat like AND until selection mechanism is added
+			const allResearched = children.every(c =>
+				['closed', 'failed'].includes(this.getDerivedStatus(c.id))
+			);
+			if (allResearched) return 'in_progress'; // Awaiting decision
+			return 'open';
+		}
+
+		return 'open';
+	}
+
+	// Decompose a task into subtasks
+	decompose(
+		parentId: string,
+		children: Array<{
+			title: string;
+			description: string;
+			type?: IssueType;
+			priority?: IssuePriority;
+			dependencies?: string[];
+			executionType?: ExecutionType;
+		}>,
+		decompositionType: DecompositionType = 'and'
+	): Issue[] {
+		const parent = this.getById(parentId);
+		if (!parent) return [];
+
+		// Update parent to set decomposition type
+		this.update(parentId, { decompositionType });
+
+		// Create children
+		const created: Issue[] = [];
+		for (const child of children) {
+			const issue = this.createChild(parentId, {
+				title: child.title,
+				description: child.description,
+				type: child.type || 'task',
+				priority: child.priority ?? parent.priority,
+				dependencies: child.dependencies,
+				executionType: child.executionType
+			});
+			if (issue) created.push(issue);
+		}
+
+		return created;
+	}
+
+	// Create a child issue
+	createChild(
+		parentId: string,
+		data: {
+			title: string;
+			description: string;
+			type: IssueType;
+			priority: IssuePriority;
+			dependencies?: string[];
+			executionType?: ExecutionType;
+		}
+	): Issue | undefined {
+		const parent = this.getById(parentId);
+		if (!parent) return undefined;
+
+		const issue = this.create({
+			...data,
+			dependencies: data.dependencies || []
+		});
+
+		if (issue) {
+			// Set parent ID
+			this.update(issue.id, { parentId });
+		}
+
+		return issue ? this.getById(issue.id) : undefined;
+	}
+
+	// Mark an issue as failed
+	markFailed(issueId: string, reason: string): Issue | undefined {
+		return this.update(issueId, {
+			status: 'failed',
+			failureReason: reason
+		});
+	}
+
+	// Check if an issue is actionable (leaf + ready)
+	isActionable(issueId: string): boolean {
+		if (!this.isLeaf(issueId)) return false;
+		const issue = this.getById(issueId);
+		if (!issue || issue.status !== 'open') return false;
+
+		// Check blocking dependencies
+		return issue.dependencies.every(depId => {
+			const dep = this.getById(depId);
+			return dep?.status === 'closed';
+		});
+	}
+
+	// Get all actionable issues (leaf + ready)
+	get actionable(): Issue[] {
+		return this.leaves.filter(i => this.isActionable(i.id));
 	}
 
 	// Check if an issue with this title already exists (case-insensitive)

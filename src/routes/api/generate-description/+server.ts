@@ -16,7 +16,13 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	const typeContext: Record<IssueType, string> = {
+		goal: 'a high-level goal or outcome to achieve',
 		task: 'a task that needs to be completed',
+		assumption: 'an assumption that should be validated',
+		risk: 'a risk that needs to be mitigated',
+		contingency: 'a backup plan if the primary approach fails',
+		question: 'a question that needs research or a decision',
+		constraint: 'a constraint or limitation on the project',
 		bug: 'a bug that needs to be fixed',
 		feature: 'a new feature to be implemented'
 	};
