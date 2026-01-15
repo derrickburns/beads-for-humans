@@ -125,17 +125,17 @@
 			<button
 				onclick={() => depManagerOpen = true}
 				class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-				title="Manage dependency relationships"
+				title="Manage task order and what needs to happen first"
 			>
 				<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
 				</svg>
-				<span>Dependencies</span>
+				<span>Task Order</span>
 			</button>
 		</div>
 
 		<div class="text-sm text-gray-500">
-			{counts.all} active · {counts.ready} ready · {counts.blocked} blocked
+			{counts.all} active · {counts.ready} can start · {counts.blocked} waiting
 		</div>
 	</div>
 
@@ -194,7 +194,7 @@
 							? 'bg-white text-gray-900 shadow-sm'
 							: 'text-gray-600 hover:text-gray-900'}"
 					>
-						Ready ({counts.ready})
+						Can Start ({counts.ready})
 					</button>
 					<button
 						onclick={() => (filter = 'blocked')}
@@ -202,7 +202,7 @@
 							? 'bg-white text-gray-900 shadow-sm'
 							: 'text-gray-600 hover:text-gray-900'}"
 					>
-						Blocked ({counts.blocked})
+						Waiting ({counts.blocked})
 					</button>
 				</div>
 

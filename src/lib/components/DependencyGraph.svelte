@@ -614,7 +614,7 @@
 				<svg class="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
 				</svg>
-				<span class="font-medium text-purple-900">AI Suggested Dependencies</span>
+				<span class="font-medium text-purple-900">AI Suggested: Finish These First</span>
 				<span class="text-sm text-purple-600">({activeSuggestions.length})</span>
 			</div>
 			<div class="flex flex-wrap gap-2">
@@ -718,7 +718,7 @@
 		onmouseup={handleMouseUp}
 		onmouseleave={handleMouseUp}
 		role="img"
-		aria-label="Dependency graph"
+		aria-label="Task order graph"
 	>
 		{#if displayedIssues.length === 0}
 			<div class="p-16 text-center">
@@ -729,7 +729,7 @@
 				</div>
 				{#if issueStore.issues.length === 0}
 					<h3 class="text-lg font-medium text-gray-900 mb-2">No issues yet</h3>
-					<p class="text-gray-500 mb-4">Create your first issue to start building your dependency graph.</p>
+					<p class="text-gray-500 mb-4">Create your first task to start building your plan.</p>
 					<a
 						href="/issue/new"
 						class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
@@ -961,7 +961,7 @@
 		<div class="flex flex-wrap items-center gap-4 text-sm">
 			<div class="flex items-center gap-2">
 				<div class="w-3 h-3 rounded-full bg-green-500"></div>
-				<span class="text-gray-600">Ready</span>
+				<span class="text-gray-600">Can Start</span>
 			</div>
 			<div class="flex items-center gap-2">
 				<div class="w-3 h-3 rounded-full bg-blue-500"></div>
@@ -969,7 +969,7 @@
 			</div>
 			<div class="flex items-center gap-2">
 				<div class="w-3 h-3 rounded-full bg-amber-500"></div>
-				<span class="text-gray-600">Blocked</span>
+				<span class="text-gray-600">Waiting</span>
 			</div>
 			<div class="flex items-center gap-2">
 				<div class="w-3 h-3 rounded-full bg-gray-400"></div>

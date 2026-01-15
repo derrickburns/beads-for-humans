@@ -232,7 +232,7 @@
 
 				validationIssues.push({
 					type: 'cycle',
-					message: `Circular dependency detected: ${cyclePath.map(id => {
+					message: `Circular waiting detected: ${cyclePath.map(id => {
 						const task = parsedTasks.find(t => t.tempId === id);
 						return task ? task.title : getExistingTitle(id);
 					}).join(' → ')}`,
@@ -292,7 +292,7 @@
 
 	async function importTasks() {
 		if (validationIssues.some(v => v.type === 'cycle')) {
-			error = 'Please resolve all cycles before importing';
+			error = 'Please resolve circular waiting before importing';
 			return;
 		}
 
@@ -464,7 +464,7 @@ We need to build a user dashboard. First we need to design the wireframes, then 
 									onclick={() => applySuggestion(issue.suggestion)}
 									class="mt-2 px-3 py-1.5 text-sm font-medium text-white bg-amber-600 rounded hover:bg-amber-700 transition-colors"
 								>
-									Fix: Remove dependency
+									Fix: Remove requirement
 								</button>
 							{/if}
 						</div>
@@ -702,7 +702,7 @@ We need to build a user dashboard. First we need to design the wireframes, then 
 				</button>
 
 				{#if validationIssues.some(v => v.type === 'cycle')}
-					<span class="text-sm text-red-600">Please resolve cycles before importing</span>
+					<span class="text-sm text-red-600">Please resolve circular waiting before importing</span>
 				{/if}
 			</div>
 		</div>

@@ -270,12 +270,12 @@
 		</div>
 	{/if}
 
-	<!-- Dependencies -->
+	<!-- Must Complete First -->
 	{#if availableDependencies.length > 0}
 		<div>
-			<span class="block text-sm font-medium text-gray-700 mb-2">Dependencies</span>
+			<span class="block text-sm font-medium text-gray-700 mb-2">Must Complete First</span>
 			<p class="text-sm text-gray-500 mb-3">
-				Select issues that must be completed before this one.
+				Select tasks that need to be done before this one can start.
 			</p>
 			<div class="space-y-2 max-h-48 overflow-y-auto">
 				{#each availableDependencies as dep}

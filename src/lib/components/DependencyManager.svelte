@@ -160,14 +160,14 @@
 			<!-- Header -->
 			<div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
 				<div>
-					<h2 class="text-xl font-semibold text-gray-900">Dependency Manager</h2>
+					<h2 class="text-xl font-semibold text-gray-900">Task Order Manager</h2>
 					<p class="text-sm text-gray-500 mt-0.5">
 						{#if mode === 'overview'}
-							Rebuild dependencies with AI or edit manually
+							Rebuild task order with AI or edit manually
 						{:else if mode === 'preview'}
-							Review AI-proposed dependency changes
+							Review AI-proposed task order changes
 						{:else}
-							Manually edit dependency relationships
+							Manually edit what needs to be done first
 						{/if}
 					</p>
 				</div>
@@ -220,10 +220,10 @@
 									</svg>
 								</div>
 								<div class="flex-1">
-									<h3 class="text-lg font-semibold text-gray-900">Rebuild Dependencies with AI</h3>
+									<h3 class="text-lg font-semibold text-gray-900">Rebuild Task Order with AI</h3>
 									<p class="text-sm text-gray-600 mt-1">
-										AI will analyze all your issues and their descriptions to determine the correct logical dependencies.
-										It will ensure no cycles exist and only create dependencies where there's a clear reason.
+										AI will analyze all your tasks and their descriptions to determine the correct order.
+										It will ensure no circular waiting exists and only set requirements where there's a clear reason.
 									</p>
 									<div class="mt-4">
 										<button
@@ -238,7 +238,7 @@
 												<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
 												</svg>
-												Rebuild All Dependencies
+												Rebuild Task Order
 											{/if}
 										</button>
 									</div>
@@ -254,15 +254,15 @@
 							</div>
 							<div class="bg-white border border-gray-200 rounded-lg p-4 text-center">
 								<div class="text-3xl font-bold text-gray-900">{issueStore.issues.reduce((acc, i) => acc + i.dependencies.length, 0)}</div>
-								<div class="text-sm text-gray-500 mt-1">Dependencies</div>
+								<div class="text-sm text-gray-500 mt-1">Prerequisites</div>
 							</div>
 							<div class="bg-white border border-gray-200 rounded-lg p-4 text-center">
 								<div class="text-3xl font-bold text-green-600">{issueStore.ready.length}</div>
-								<div class="text-sm text-gray-500 mt-1">Ready</div>
+								<div class="text-sm text-gray-500 mt-1">Can Start</div>
 							</div>
 							<div class="bg-white border border-gray-200 rounded-lg p-4 text-center">
 								<div class="text-3xl font-bold text-amber-600">{issueStore.blocked.length}</div>
-								<div class="text-sm text-gray-500 mt-1">Blocked</div>
+								<div class="text-sm text-gray-500 mt-1">Waiting</div>
 							</div>
 						</div>
 
@@ -271,7 +271,7 @@
 							<div class="flex items-center justify-between">
 								<div>
 									<h4 class="font-medium text-gray-900">Manual Editing</h4>
-									<p class="text-sm text-gray-500 mt-0.5">Inspect and manually adjust individual dependencies</p>
+									<p class="text-sm text-gray-500 mt-0.5">Inspect and manually adjust task order</p>
 								</div>
 								<button
 									onclick={() => mode = 'manual'}
@@ -282,9 +282,9 @@
 							</div>
 						</div>
 
-						<!-- Current Dependencies List -->
+						<!-- Current Task Order -->
 						<div>
-							<h4 class="font-medium text-gray-900 mb-3">Current Dependencies</h4>
+							<h4 class="font-medium text-gray-900 mb-3">Current Task Order</h4>
 							<div class="border border-gray-200 rounded-lg divide-y divide-gray-200 max-h-64 overflow-y-auto">
 								{#each issueStore.issues.filter(i => i.status !== 'closed') as issue}
 									<div class="p-3 flex items-start gap-3">
@@ -326,16 +326,16 @@
 
 						{#if rebuildResult.cyclesDetected.length > 0}
 							<div class="bg-amber-50 border border-amber-200 rounded-lg p-4">
-								<h4 class="font-medium text-amber-900">Cycles Prevented</h4>
+								<h4 class="font-medium text-amber-900">Circular Waiting Prevented</h4>
 								<p class="text-sm text-amber-800 mt-1">
-									The AI suggested some dependencies that would create cycles. These have been automatically removed.
+									The AI suggested some task orders that would create circular waiting. These have been automatically removed.
 								</p>
 							</div>
 						{/if}
 
 						<!-- Proposed Changes -->
 						<div>
-							<h4 class="font-medium text-gray-900 mb-3">Proposed Dependencies</h4>
+							<h4 class="font-medium text-gray-900 mb-3">Proposed Task Order</h4>
 							<div class="border border-gray-200 rounded-lg divide-y divide-gray-200 max-h-96 overflow-y-auto">
 								{#each rebuildResult.dependencies as dep}
 									{@const issue = getIssue(dep.issueId)}
@@ -452,9 +452,9 @@
 										{/if}
 									</div>
 
-									<!-- Current Dependencies -->
+									<!-- Must Complete First -->
 									<div>
-										<h4 class="text-sm font-medium text-gray-700 mb-2">Depends On (Blockers)</h4>
+										<h4 class="text-sm font-medium text-gray-700 mb-2">Must Complete First</h4>
 										{#if selectedIssue.dependencies.length > 0}
 											<div class="space-y-2">
 												{#each selectedIssue.dependencies as depId}
@@ -475,13 +475,13 @@
 												{/each}
 											</div>
 										{:else}
-											<p class="text-sm text-gray-400">No dependencies</p>
+											<p class="text-sm text-gray-400">Nothing needs to be done first</p>
 										{/if}
 									</div>
 
-									<!-- Add Dependency -->
+									<!-- Add Prerequisite -->
 									<div>
-										<h4 class="text-sm font-medium text-gray-700 mb-2">Add Dependency</h4>
+										<h4 class="text-sm font-medium text-gray-700 mb-2">Add Prerequisite</h4>
 										{@const available = getAvailableDeps(selectedIssue)}
 										{#if available.length > 0}
 											<div class="max-h-48 overflow-y-auto border border-gray-200 rounded">
@@ -504,7 +504,7 @@
 								</div>
 							{:else}
 								<div class="flex items-center justify-center h-full text-gray-500">
-									<p>Select an issue to edit its dependencies</p>
+									<p>Select a task to edit what needs to be done first</p>
 								</div>
 							{/if}
 						</div>

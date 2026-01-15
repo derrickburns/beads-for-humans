@@ -35,10 +35,10 @@
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
 				</svg>
 				<div>
-					<h3 class="font-medium text-amber-800">Dependency Graph Issues</h3>
+					<h3 class="font-medium text-amber-800">Task Order Issues</h3>
 					<p class="text-sm text-amber-700 mt-1">
 						{#if health.cycles.length > 0}
-							<span class="font-medium">{health.cycles.length} cycle{health.cycles.length > 1 ? 's' : ''}</span>
+							<span class="font-medium">{health.cycles.length} circular waiting issue{health.cycles.length > 1 ? 's' : ''}</span>
 						{/if}
 						{#if health.invalidDeps.length > 0}
 							{#if health.cycles.length > 0}, {/if}
@@ -46,7 +46,7 @@
 						{/if}
 						{#if health.redundantDeps.length > 0}
 							{#if health.cycles.length > 0 || health.invalidDeps.length > 0}, {/if}
-							<span class="font-medium">{health.redundantDeps.length} redundant dependenc{health.redundantDeps.length > 1 ? 'ies' : 'y'}</span>
+							<span class="font-medium">{health.redundantDeps.length} unnecessary requirement{health.redundantDeps.length > 1 ? 's' : ''}</span>
 						{/if}
 					</p>
 				</div>
@@ -75,13 +75,13 @@
 			<div class="mt-4 space-y-4 border-t border-amber-200 pt-4">
 				{#if health.cycles.length > 0}
 					<div>
-						<h4 class="text-sm font-medium text-red-800 mb-2">Circular Dependencies</h4>
+						<h4 class="text-sm font-medium text-red-800 mb-2">Circular Waiting</h4>
 						{#each health.cycles as cycle}
 							<div class="text-sm text-red-700 bg-red-50 p-2 rounded mb-2">
 								{cycle.titles.join(' → ')}
 							</div>
 						{/each}
-						<p class="text-xs text-red-600">Cycles must be fixed manually by editing dependencies.</p>
+						<p class="text-xs text-red-600">Circular waiting must be fixed manually by editing task order.</p>
 					</div>
 				{/if}
 
@@ -109,7 +109,7 @@
 				{#if health.redundantDeps.length > 0}
 					<div>
 						<div class="flex items-center justify-between mb-2">
-							<h4 class="text-sm font-medium text-amber-800">Redundant Dependencies</h4>
+							<h4 class="text-sm font-medium text-amber-800">Unnecessary Requirements</h4>
 							<button
 								type="button"
 								onclick={fixRedundant}

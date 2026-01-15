@@ -65,9 +65,9 @@
 
 	// Quick prompts for common actions
 	const quickPrompts = [
-		{ label: 'Unblock me', prompt: 'What should I work on to unblock the most tasks?' },
-		{ label: 'Analyze graph', prompt: 'Analyze my dependency graph and suggest improvements' },
-		{ label: 'Next priority', prompt: 'What is the highest priority task I should work on?' }
+		{ label: 'What next?', prompt: 'What should I work on to unblock the most tasks?' },
+		{ label: 'Analyze plan', prompt: 'Analyze my task order and suggest improvements' },
+		{ label: 'Top priority', prompt: 'What is the highest priority task I should work on?' }
 	];
 </script>
 
@@ -103,7 +103,7 @@
 			</button>
 		</div>
 
-		<!-- Most Important Blocker Card (if applicable) -->
+		<!-- Do This First Card (if applicable) -->
 		{#if importantBlocker && focusedIssue?.status !== 'closed'}
 			<div class="p-4 bg-amber-50 border-b border-amber-200">
 				<div class="flex items-start gap-3">
@@ -113,7 +113,7 @@
 						</svg>
 					</div>
 					<div class="flex-1 min-w-0">
-						<p class="text-sm font-medium text-amber-900">Most Important Blocker</p>
+						<p class="text-sm font-medium text-amber-900">Do This First</p>
 						<p class="text-sm text-amber-800 truncate mt-0.5">{importantBlocker.blocker.title}</p>
 						<div class="flex items-center gap-2 mt-2">
 							<div class="text-xs text-amber-600">

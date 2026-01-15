@@ -414,16 +414,16 @@
 					</div>
 				</div>
 
-				<!-- Dependencies Section -->
+				<!-- Must Complete First Section -->
 				<div>
 					<div class="flex items-center justify-between mb-2">
 						<div class="flex items-center gap-2">
 							<h3 class="text-sm font-medium text-gray-500">
-								Dependencies ({issue.dependencies.length})
+								Must Complete First ({issue.dependencies.length})
 							</h3>
 							{#if blockers.length > 0}
 								<span class="text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700">
-									{blockers.length} blocking
+									{blockers.length} not done
 								</span>
 							{/if}
 						</div>
@@ -460,7 +460,7 @@
 					<!-- Manual Add Dropdown -->
 					{#if showAddDependency && availableForDependency.length > 0}
 						<div class="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-							<p class="text-xs text-gray-500 mb-2">Select an issue this depends on:</p>
+							<p class="text-xs text-gray-500 mb-2">Select a task that must be done first:</p>
 							<div class="space-y-1 max-h-40 overflow-y-auto">
 								{#each availableForDependency as dep}
 									<button
@@ -529,12 +529,12 @@
 											{dep.title}
 										</a>
 										<span class="text-xs {dep.status === 'closed' ? 'text-green-600' : 'text-red-600'} font-medium">
-											{dep.status === 'closed' ? 'Done' : 'Blocking'}
+											{dep.status === 'closed' ? 'Done' : 'Not done'}
 										</span>
 										<button
 											onclick={() => reverseDependency(dep.id)}
 											class="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-											title="Reverse direction (make this block that)"
+											title="Reverse direction"
 										>
 											<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
@@ -543,7 +543,7 @@
 										<button
 											onclick={() => removeDependency(dep.id)}
 											class="p-1 text-gray-400 hover:text-red-600 transition-colors"
-											title="Remove dependency"
+											title="Remove prerequisite"
 										>
 											<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -554,15 +554,15 @@
 							{/each}
 						</div>
 					{:else}
-						<p class="text-sm text-gray-400">No dependencies</p>
+						<p class="text-sm text-gray-400">Nothing needs to be done first</p>
 					{/if}
 				</div>
 
-				<!-- Blocking (issues that depend on this one) -->
+				<!-- Required By (tasks waiting on this one) -->
 				<div>
 					<div class="flex items-center justify-between mb-2">
 						<h3 class="text-sm font-medium text-gray-500">
-							Blocking ({blocking.length})
+							Required By ({blocking.length})
 						</h3>
 						{#if availableForBlocking.length > 0}
 							<button
@@ -607,7 +607,7 @@
 									<button
 										onclick={() => reverseBlocking(blocked.id)}
 										class="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-										title="Reverse direction (make this depend on that)"
+										title="Reverse direction"
 									>
 										<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
@@ -616,7 +616,7 @@
 									<button
 										onclick={() => removeBlocking(blocked.id)}
 										class="p-1 text-gray-400 hover:text-red-600 transition-colors"
-										title="Remove blocking relationship"
+										title="Remove requirement"
 									>
 										<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -626,7 +626,7 @@
 							{/each}
 						</div>
 					{:else}
-						<p class="text-sm text-gray-400">Not blocking any issues</p>
+						<p class="text-sm text-gray-400">No tasks waiting on this</p>
 					{/if}
 				</div>
 

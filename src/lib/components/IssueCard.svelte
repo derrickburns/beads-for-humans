@@ -48,7 +48,7 @@
 				</span>
 				{#if isBlocked}
 					<span class="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
-						Blocked
+						Waiting
 					</span>
 				{/if}
 			</div>
@@ -61,7 +61,7 @@
 
 			{#if issue.dependencies.length > 0}
 				<div class="mt-2 text-xs text-gray-400">
-					{issue.dependencies.length} dependenc{issue.dependencies.length === 1 ? 'y' : 'ies'}
+					waiting on {issue.dependencies.length} task{issue.dependencies.length === 1 ? '' : 's'}
 				</div>
 			{/if}
 		</div>
