@@ -1,0 +1,195 @@
+<script lang="ts">
+	import { issueStore } from '$lib/stores/issues.svelte';
+	import { aiSettings } from '$lib/stores/aiSettings.svelte';
+	import type { IssueType, IssuePriority } from '$lib/types/issue';
+
+	let quickInput = $state('');
+	let isExpanding = $state(false);
+	let expandedResult = $state<{
+		title: string;
+		description: string;
+		type: IssueType;
+		priority: IssuePriority;
+	} | null>(null);
+	let error = $state<string | null>(null);
+
+	async function expandAndCreate() {
+		if (!quickInput.trim()) return;
+
+		isExpanding = true;
+		error = null;
+		expandedResult = null;
+
+		try {
+			const { model, apiKey } = aiSettings.getRequestSettings();
+			const response = await fetch('/api/expand-issue', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					input: quickInput.trim(),
+					model,
+					apiKey
+				})
+			});
+
+			const data = await response.json();
+
+			if (data.error) {
+				error = data.error;
+				return;
+			}
+
+			expandedResult = data;
+		} catch {
+			error = 'Failed to expand. Try again or create manually.';
+		} finally {
+			isExpanding = false;
+		}
+	}
+
+	function confirmCreate() {
+		if (!expandedResult) return;
+
+		issueStore.create({
+			title: expandedResult.title,
+			description: expandedResult.description,
+			type: expandedResult.type,
+			priority: expandedResult.priority
+		});
+
+		// Reset
+		quickInput = '';
+		expandedResult = null;
+	}
+
+	function editManually() {
+		// Could dispatch an event to open IssueForm with pre-filled data
+		// For now, just reset and let user create manually
+		quickInput = '';
+		expandedResult = null;
+	}
+
+	function cancel() {
+		expandedResult = null;
+	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter' && !e.shiftKey && !isExpanding && !expandedResult) {
+			e.preventDefault();
+			expandAndCreate();
+		}
+	}
+
+	const typeColors: Record<IssueType, string> = {
+		task: 'bg-blue-100 text-blue-700',
+		bug: 'bg-red-100 text-red-700',
+		feature: 'bg-purple-100 text-purple-700'
+	};
+
+	const priorityLabels: Record<IssuePriority, string> = {
+		0: 'P0 - Critical',
+		1: 'P1 - High',
+		2: 'P2 - Medium',
+		3: 'P3 - Low',
+		4: 'P4 - Backlog'
+	};
+</script>
+
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+	{#if !expandedResult}
+		<!-- Quick input mode -->
+		<div class="flex gap-3">
+			<div class="flex-1 relative">
+				<input
+					type="text"
+					bind:value={quickInput}
+					onkeydown={handleKeydown}
+					placeholder="Describe what you need to do..."
+					disabled={isExpanding || !aiSettings.isConfigured}
+					class="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+				/>
+				{#if isExpanding}
+					<div class="absolute right-3 top-1/2 -translate-y-1/2">
+						<div class="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+					</div>
+				{/if}
+			</div>
+			<button
+				onclick={expandAndCreate}
+				disabled={!quickInput.trim() || isExpanding || !aiSettings.isConfigured}
+				class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+			>
+				<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+				</svg>
+				<span class="hidden sm:inline">Quick Add</span>
+			</button>
+		</div>
+
+		{#if !aiSettings.isConfigured}
+			<p class="mt-2 text-sm text-amber-600">
+				Set up AI in the top menu to use quick create.
+			</p>
+		{/if}
+
+		{#if error}
+			<p class="mt-2 text-sm text-red-600">{error}</p>
+		{/if}
+
+		<p class="mt-2 text-xs text-gray-500">
+			Type a few words and AI will create a full issue. Press Enter or click Quick Add.
+		</p>
+	{:else}
+		<!-- Preview expanded result -->
+		<div class="space-y-4">
+			<div class="flex items-start justify-between">
+				<h3 class="text-lg font-semibold text-gray-900">Review & Create</h3>
+				<div class="flex gap-2">
+					<span class="px-2 py-1 text-xs font-medium rounded-full {typeColors[expandedResult.type]}">
+						{expandedResult.type}
+					</span>
+					<span class="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700">
+						{priorityLabels[expandedResult.priority]}
+					</span>
+				</div>
+			</div>
+
+			<div class="bg-gray-50 rounded-lg p-4 space-y-3">
+				<div>
+					<span class="block text-xs font-medium text-gray-500 mb-1">Title</span>
+					<p class="text-gray-900 font-medium">{expandedResult.title}</p>
+				</div>
+				<div>
+					<span class="block text-xs font-medium text-gray-500 mb-1">Description</span>
+					<p class="text-gray-700 text-sm">{expandedResult.description}</p>
+				</div>
+			</div>
+
+			<div class="flex items-center justify-between pt-2">
+				<button
+					onclick={cancel}
+					class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
+				>
+					Cancel
+				</button>
+				<div class="flex gap-2">
+					<button
+						onclick={editManually}
+						class="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+					>
+						Edit First
+					</button>
+					<button
+						onclick={confirmCreate}
+						class="px-6 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+					>
+						<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+						</svg>
+						Create Issue
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
+</div>

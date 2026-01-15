@@ -8,6 +8,7 @@
 	import GraphChatSidebar from '$lib/components/GraphChatSidebar.svelte';
 	import ProjectSelector from '$lib/components/ProjectSelector.svelte';
 	import DependencyManager from '$lib/components/DependencyManager.svelte';
+	import QuickCreate from '$lib/components/QuickCreate.svelte';
 	import { graphChatStore } from '$lib/stores/graphChat.svelte';
 	import type { IssueStatus } from '$lib/types/issue';
 
@@ -141,6 +142,9 @@
 
 	<!-- Graph Health Warnings -->
 	<GraphHealth />
+
+	<!-- Quick Create -->
+	<QuickCreate />
 
 	{#if viewMode === 'graph'}
 		<!-- Graph View (Primary) with Chat Sidebar -->
