@@ -37,6 +37,33 @@ export interface BenchmarkResult {
 	modelUsed: string;
 }
 
+// Budget tracking for cost estimation
+export interface BudgetEstimate {
+	minCost: number;
+	maxCost: number;
+	expectedCost: number;
+	currency: string;
+	confidence: number;
+	reasoning: string;
+	factors: string[];
+	alternatives?: BudgetAlternative[];
+	estimatedAt: string;
+	location?: string;
+}
+
+export interface BudgetAlternative {
+	description: string;
+	savings: number;
+	tradeoff: string;
+}
+
+export interface ActualCost {
+	amount: number;
+	currency: string;
+	recordedAt: string;
+	notes?: string;
+}
+
 export interface Issue {
 	id: string;
 	title: string;
@@ -56,6 +83,9 @@ export interface Issue {
 	executionReason?: string;                // Why this execution type was chosen
 	// Benchmark history
 	lastBenchmark?: BenchmarkResult;         // Most recent AI capability benchmark
+	// Budget tracking
+	budgetEstimate?: BudgetEstimate;         // AI-estimated cost range
+	actualCost?: ActualCost;                 // User-recorded actual cost
 }
 
 export interface RelationshipSuggestion {

@@ -6,7 +6,9 @@ import type {
 	IssueType,
 	ExecutionType,
 	AIAssignment,
-	NeedsHumanTrigger
+	NeedsHumanTrigger,
+	BudgetEstimate,
+	ActualCost
 } from '$lib/types/issue';
 
 const STORAGE_KEY = 'issues';
@@ -716,6 +718,82 @@ class IssueStore {
 		}
 
 		return timedOut;
+	}
+
+	// ===== Budget Tracking Methods =====
+
+	// Update budget estimate for an issue
+	updateBudgetEstimate(issueId: string, estimate: BudgetEstimate): Issue | undefined {
+		return this.update(issueId, { budgetEstimate: estimate });
+	}
+
+	// Record actual cost for an issue
+	recordActualCost(
+		issueId: string,
+		amount: number,
+		currency: string = 'USD',
+		notes?: string
+	): Issue | undefined {
+		return this.update(issueId, {
+			actualCost: {
+				amount,
+				currency,
+				recordedAt: new Date().toISOString(),
+				notes
+			}
+		});
+	}
+
+	// Clear budget estimate
+	clearBudgetEstimate(issueId: string): Issue | undefined {
+		return this.update(issueId, { budgetEstimate: undefined });
+	}
+
+	// Clear actual cost
+	clearActualCost(issueId: string): Issue | undefined {
+		return this.update(issueId, { actualCost: undefined });
+	}
+
+	// Computed: total estimated budget
+	get totalBudget(): { min: number; max: number; expected: number; currency: string } {
+		const issues = this.issues.filter(i => i.budgetEstimate && i.status !== 'closed');
+		return {
+			min: issues.reduce((sum, i) => sum + (i.budgetEstimate?.minCost || 0), 0),
+			max: issues.reduce((sum, i) => sum + (i.budgetEstimate?.maxCost || 0), 0),
+			expected: issues.reduce((sum, i) => sum + (i.budgetEstimate?.expectedCost || 0), 0),
+			currency: issues[0]?.budgetEstimate?.currency || 'USD'
+		};
+	}
+
+	// Computed: total actual costs
+	get totalActualCost(): { amount: number; currency: string } {
+		const issues = this.issues.filter(i => i.actualCost);
+		return {
+			amount: issues.reduce((sum, i) => sum + (i.actualCost?.amount || 0), 0),
+			currency: issues[0]?.actualCost?.currency || 'USD'
+		};
+	}
+
+	// Computed: issues over budget
+	get overBudget(): Issue[] {
+		return this.issues.filter(i => {
+			if (!i.actualCost || !i.budgetEstimate) return false;
+			return i.actualCost.amount > i.budgetEstimate.maxCost;
+		});
+	}
+
+	// Computed: issues with cost estimates
+	get withBudgetEstimates(): Issue[] {
+		return this.issues.filter(i => i.budgetEstimate && i.status !== 'closed');
+	}
+
+	// Get budget variance (actual vs expected)
+	getBudgetVariance(): { variance: number; percentOver: number } {
+		const actual = this.totalActualCost.amount;
+		const expected = this.totalBudget.expected;
+		const variance = actual - expected;
+		const percentOver = expected > 0 ? (variance / expected) * 100 : 0;
+		return { variance, percentOver };
 	}
 }
 
