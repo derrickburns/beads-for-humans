@@ -1,9 +1,10 @@
 <script lang="ts">
 	import type { Issue, IssuePriority, IssueType, IssueStatus, ExecutionType, RelationshipSuggestion } from '$lib/types/issue';
-	import { PRIORITY_LABELS, TYPE_LABELS, STATUS_LABELS, EXECUTION_TYPE_LABELS, EXECUTION_TYPE_DESCRIPTIONS } from '$lib/types/issue';
+	import { PRIORITY_LABELS, PRIORITY_DESCRIPTIONS, TYPE_LABELS, STATUS_LABELS, EXECUTION_TYPE_LABELS, EXECUTION_TYPE_DESCRIPTIONS } from '$lib/types/issue';
 	import { issueStore } from '$lib/stores/issues.svelte';
 	import { suggestRelationships } from '$lib/ai/relationships';
 	import RelationshipSuggestionComponent from './RelationshipSuggestion.svelte';
+	import HelpTooltip from './HelpTooltip.svelte';
 	import { goto } from '$app/navigation';
 
 	let {
@@ -247,14 +248,21 @@
 		</div>
 
 		<div>
-			<label for="priority" class="block text-sm font-medium text-gray-700 mb-1"> Priority </label>
+			<label for="priority" class="text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
+				Priority
+				<HelpTooltip text="P0: Drop everything, blocking/damaging now
+P1: Do this week, important
+P2: Normal priority, no rush
+P3: Nice to have
+P4: Maybe someday" position="right" />
+			</label>
 			<select
 				id="priority"
 				bind:value={priority}
 				class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow text-gray-900"
 			>
 				{#each Object.entries(PRIORITY_LABELS) as [value, label]}
-					<option value={Number(value)}>{label}</option>
+					<option value={Number(value)} title={PRIORITY_DESCRIPTIONS[Number(value) as IssuePriority]}>{label}</option>
 				{/each}
 			</select>
 		</div>
@@ -262,7 +270,10 @@
 
 	<!-- Who Does This Task -->
 	<div>
-		<span class="block text-sm font-medium text-gray-700 mb-2">Who Does This?</span>
+		<span class="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1.5">
+			Who Does This?
+			<HelpTooltip text="As AI gets smarter, tasks can be re-evaluated. Start with what makes sense today." position="right" />
+		</span>
 		<p class="text-sm text-gray-500 mb-3">
 			Identify whether you need to do this yourself, or if AI can help.
 		</p>
@@ -324,7 +335,10 @@
 	<!-- Must Complete First -->
 	{#if availableDependencies.length > 0}
 		<div>
-			<span class="block text-sm font-medium text-gray-700 mb-2">Must Complete First</span>
+			<span class="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1.5">
+				Must Complete First
+				<HelpTooltip text="Also called 'blockers'. This task can't start until these are done." position="right" />
+			</span>
 			<p class="text-sm text-gray-500 mb-3">
 				Select tasks that need to be done before this one can start.
 			</p>

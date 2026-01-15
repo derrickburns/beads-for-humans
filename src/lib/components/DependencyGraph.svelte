@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import type { Issue, RelationshipSuggestion, GraphImprovement, ExecutionType } from '$lib/types/issue';
 	import { getModelAbbrev, getModelColor } from '$lib/types/graphChat';
+	import HelpTooltip from './HelpTooltip.svelte';
 
 	// Execution type visual config
 	const executionTypeConfig: Record<ExecutionType, { color: string; bgColor: string; icon: string; label: string }> = {
@@ -988,32 +989,39 @@
 			<div class="flex items-center gap-2">
 				<div class="w-3 h-3 rounded-full bg-green-500"></div>
 				<span class="text-gray-600">Can Start</span>
+				<HelpTooltip text="Ready to work on - no blockers" position="bottom" />
 			</div>
 			<div class="flex items-center gap-2">
 				<div class="w-3 h-3 rounded-full bg-blue-500"></div>
 				<span class="text-gray-600">In Progress</span>
+				<HelpTooltip text="Currently being worked on" position="bottom" />
 			</div>
 			<div class="flex items-center gap-2">
 				<div class="w-3 h-3 rounded-full bg-amber-500"></div>
 				<span class="text-gray-600">Waiting</span>
+				<HelpTooltip text="Blocked by other tasks that must finish first" position="bottom" />
 			</div>
 			<div class="flex items-center gap-2">
 				<div class="w-3 h-3 rounded-full bg-gray-400"></div>
 				<span class="text-gray-600">Closed</span>
+				<HelpTooltip text="Completed and done" position="bottom" />
 			</div>
 			<div class="h-4 border-l border-gray-300"></div>
 			<!-- Execution type (who does it) -->
 			<div class="flex items-center gap-2">
 				<div class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700 border border-red-300">You</div>
 				<span class="text-gray-600">You do</span>
+				<HelpTooltip text="Only you can do this (physical action, signature, decision)" position="bottom" />
 			</div>
 			<div class="flex items-center gap-2">
 				<div class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-300">AI</div>
 				<span class="text-gray-600">AI does</span>
+				<HelpTooltip text="AI can complete this without your involvement" position="bottom" />
 			</div>
 			<div class="flex items-center gap-2">
 				<div class="px-1 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-300">✓</div>
 				<span class="text-gray-600">Verify</span>
+				<HelpTooltip text="You need to review and approve when this is done" position="bottom" />
 			</div>
 			<div class="h-4 border-l border-gray-300"></div>
 			<div class="flex items-center gap-2">
@@ -1021,15 +1029,18 @@
 					<span class="text-[8px] text-white font-bold">CL</span>
 				</div>
 				<span class="text-gray-600">AI Working</span>
+				<HelpTooltip text="An AI model is actively working on this task" position="bottom" />
 			</div>
 			<div class="flex items-center gap-2">
 				<div class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
 				<span class="text-gray-600">Needs Help</span>
+				<HelpTooltip text="AI got stuck or timed out - you need to intervene" position="bottom" />
 			</div>
 			{#if activeSuggestions.length > 0}
 				<div class="flex items-center gap-2">
 					<div class="w-3 h-3 rounded-full bg-purple-600"></div>
 					<span class="text-gray-600">AI Suggested</span>
+					<HelpTooltip text="AI thinks this task should be done before the selected one" position="bottom" />
 				</div>
 			{/if}
 		</div>

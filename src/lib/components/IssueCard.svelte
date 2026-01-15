@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { Issue, ExecutionType } from '$lib/types/issue';
-	import { PRIORITY_LABELS, TYPE_LABELS, EXECUTION_TYPE_LABELS } from '$lib/types/issue';
+	import type { Issue, ExecutionType, IssuePriority } from '$lib/types/issue';
+	import { PRIORITY_LABELS, PRIORITY_DESCRIPTIONS, TYPE_LABELS, EXECUTION_TYPE_LABELS, STATUS_LABELS, STATUS_DESCRIPTIONS } from '$lib/types/issue';
 	import { issueStore } from '$lib/stores/issues.svelte';
 
 	let { issue }: { issue: Issue } = $props();
@@ -50,7 +50,7 @@
 	class="block bg-white rounded-xl border border-gray-200 p-4 hover:border-gray-300 hover:shadow-md transition-all duration-200 {isBlocked ? 'opacity-60' : ''}"
 >
 	<div class="flex items-start gap-3">
-		<div class="flex-shrink-0 mt-1">
+		<div class="flex-shrink-0 mt-1" title="{STATUS_LABELS[issue.status]}: {STATUS_DESCRIPTIONS[issue.status]}">
 			<div class="w-2.5 h-2.5 rounded-full {statusColors[issue.status]}"></div>
 		</div>
 
@@ -59,7 +59,10 @@
 				<span class="text-xs font-medium px-2 py-0.5 rounded-full border {typeColors[issue.type]}">
 					{TYPE_LABELS[issue.type]}
 				</span>
-				<span class="text-xs font-medium px-2 py-0.5 rounded-full {priorityColors[issue.priority]}">
+				<span
+					class="text-xs font-medium px-2 py-0.5 rounded-full {priorityColors[issue.priority]}"
+					title={PRIORITY_DESCRIPTIONS[issue.priority as IssuePriority]}
+				>
 					P{issue.priority}
 				</span>
 				{#if issue.executionType}

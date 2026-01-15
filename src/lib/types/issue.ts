@@ -87,10 +87,24 @@ export const PRIORITY_LABELS: Record<IssuePriority, string> = {
 	4: 'P4 - Backlog'
 };
 
+export const PRIORITY_DESCRIPTIONS: Record<IssuePriority, string> = {
+	0: 'Drop everything. This is blocking other people or causing major damage right now.',
+	1: 'Do this soon. Important work that should be done this week.',
+	2: 'Normal priority. Plan to do this but no rush.',
+	3: 'Nice to have. Do when higher priorities are done.',
+	4: 'Maybe someday. Park here and revisit later.'
+};
+
 export const STATUS_LABELS: Record<IssueStatus, string> = {
 	open: 'Open',
 	in_progress: 'In Progress',
 	closed: 'Closed'
+};
+
+export const STATUS_DESCRIPTIONS: Record<IssueStatus, string> = {
+	open: 'Ready to start. No blockers preventing work.',
+	in_progress: 'Currently being worked on.',
+	closed: 'Completed and done.'
 };
 
 export const TYPE_LABELS: Record<IssueType, string> = {
