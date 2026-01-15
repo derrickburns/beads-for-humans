@@ -1495,9 +1495,4 @@ class IssueStore {
 	}
 }
 
-// Helper to generate IDs (expose for constraint/concern creation)
-function generateId(): string {
-	return crypto.randomUUID();
-}
-
 export const issueStore = new IssueStore();

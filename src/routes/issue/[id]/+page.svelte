@@ -9,6 +9,7 @@
 	import SuggestedActions from '$lib/components/SuggestedActions.svelte';
 	import Toast from '$lib/components/Toast.svelte';
 	import FollowUpSuggestions from '$lib/components/FollowUpSuggestions.svelte';
+	import PlanningAssistant from '$lib/components/PlanningAssistant.svelte';
 
 	let id = $derived($page.params.id);
 	let issue = $derived(issueStore.getById(id));
@@ -264,8 +265,12 @@
 	const statusColors: Record<string, string> = {
 		open: 'bg-green-100 text-green-800',
 		in_progress: 'bg-blue-100 text-blue-800',
-		closed: 'bg-gray-100 text-gray-600'
+		closed: 'bg-gray-100 text-gray-600',
+		failed: 'bg-red-100 text-red-800'
 	};
+
+	// Check if this is a goal/container issue that can use the planning assistant
+	let isGoalType = $derived(issue?.type === 'goal' || issueStore.isContainer(issue?.id ?? ''));
 
 	const priorityColors: Record<number, string> = {
 		0: 'bg-red-100 text-red-800',
@@ -733,6 +738,13 @@
 				{#if issue.status !== 'closed'}
 					<div class="pt-4 border-t border-gray-100">
 						<SuggestedActions {issue} />
+					</div>
+				{/if}
+
+				<!-- Planning Assistant for Goal-type Issues -->
+				{#if isGoalType}
+					<div class="pt-6 border-t border-gray-100">
+						<PlanningAssistant goalId={issue.id} />
 					</div>
 				{/if}
 
