@@ -10,6 +10,7 @@
 	import DependencyManager from '$lib/components/DependencyManager.svelte';
 	import QuickCreate from '$lib/components/QuickCreate.svelte';
 	import WhatNext from '$lib/components/WhatNext.svelte';
+	import BenchmarkSuggestions from '$lib/components/BenchmarkSuggestions.svelte';
 	import { graphChatStore } from '$lib/stores/graphChat.svelte';
 	import type { IssueStatus } from '$lib/types/issue';
 
@@ -161,6 +162,9 @@
 
 	<!-- Quick Create -->
 	<QuickCreate />
+
+	<!-- AI Capability Benchmark -->
+	<BenchmarkSuggestions />
 
 	{#if viewMode === 'graph'}
 		<!-- Graph View (Primary) with Chat Sidebar -->

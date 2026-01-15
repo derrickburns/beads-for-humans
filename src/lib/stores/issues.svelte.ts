@@ -580,6 +580,47 @@ class IssueStore {
 		return this.update(issueId, { needsHuman: undefined });
 	}
 
+	// ===== AI Capability Benchmarking =====
+
+	// Update the benchmark result for an issue
+	updateBenchmark(
+		issueId: string,
+		result: {
+			currentType: ExecutionType;
+			suggestedType: ExecutionType;
+			confidence: number;
+			reasoning: string;
+			changed: boolean;
+			benchmarkedAt: string;
+			modelUsed: string;
+		}
+	): Issue | undefined {
+		return this.update(issueId, { lastBenchmark: result });
+	}
+
+	// Apply a benchmark suggestion (change execution type)
+	applyBenchmark(issueId: string): Issue | undefined {
+		const issue = this.getById(issueId);
+		if (!issue?.lastBenchmark?.changed) return undefined;
+
+		return this.update(issueId, {
+			executionType: issue.lastBenchmark.suggestedType,
+			executionReason: `Reclassified based on AI benchmark: ${issue.lastBenchmark.reasoning}`
+		});
+	}
+
+	// Clear benchmark result
+	clearBenchmark(issueId: string): Issue | undefined {
+		return this.update(issueId, { lastBenchmark: undefined });
+	}
+
+	// Computed: issues with reclassification suggestions
+	get benchmarkSuggestions(): Issue[] {
+		return this.issues.filter(
+			(i) => i.lastBenchmark?.changed && i.status !== 'closed'
+		);
+	}
+
 	// Computed: issues needing human attention
 	get needsHuman(): Issue[] {
 		return this.issues.filter((i) => i.needsHuman && i.status !== 'closed');

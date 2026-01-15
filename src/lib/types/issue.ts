@@ -26,6 +26,17 @@ export interface NeedsHumanReason {
 	aiModelId?: string;     // Which AI flagged it (for ai_blocked)
 }
 
+// Benchmark result for tracking classification changes
+export interface BenchmarkResult {
+	currentType: ExecutionType;
+	suggestedType: ExecutionType;
+	confidence: number;
+	reasoning: string;
+	changed: boolean;
+	benchmarkedAt: string;
+	modelUsed: string;
+}
+
 export interface Issue {
 	id: string;
 	title: string;
@@ -43,6 +54,8 @@ export interface Issue {
 	aiConfidence?: number;                   // 0-1, how confident AI is it can help
 	validationRequired?: boolean;            // Does this need human sign-off?
 	executionReason?: string;                // Why this execution type was chosen
+	// Benchmark history
+	lastBenchmark?: BenchmarkResult;         // Most recent AI capability benchmark
 }
 
 export interface RelationshipSuggestion {
