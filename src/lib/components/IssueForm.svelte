@@ -116,7 +116,9 @@
 			if (onSave) {
 				onSave(savedIssue);
 			} else {
-				goto(`/issue/${savedIssue.id}`);
+				// Add ?new=true for new issues to trigger follow-up suggestions
+				const url = issue ? `/issue/${savedIssue.id}` : `/issue/${savedIssue.id}?new=true`;
+				goto(url);
 			}
 		}
 	}

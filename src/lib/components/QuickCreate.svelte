@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { issueStore } from '$lib/stores/issues.svelte';
 	import { aiSettings } from '$lib/stores/aiSettings.svelte';
-	import type { IssueType, IssuePriority } from '$lib/types/issue';
+	import type { Issue, IssueType, IssuePriority } from '$lib/types/issue';
+	import FollowUpSuggestions from './FollowUpSuggestions.svelte';
 
 	let quickInput = $state('');
 	let isExpanding = $state(false);
@@ -12,6 +13,7 @@
 		priority: IssuePriority;
 	} | null>(null);
 	let error = $state<string | null>(null);
+	let createdIssue = $state<Issue | null>(null);
 
 	async function expandAndCreate() {
 		if (!quickInput.trim()) return;
@@ -50,16 +52,22 @@
 	function confirmCreate() {
 		if (!expandedResult) return;
 
-		issueStore.create({
+		const newIssue = issueStore.create({
 			title: expandedResult.title,
 			description: expandedResult.description,
 			type: expandedResult.type,
 			priority: expandedResult.priority
 		});
 
-		// Reset
-		quickInput = '';
+		// Show follow-up suggestions
+		createdIssue = newIssue;
 		expandedResult = null;
+	}
+
+	function dismissSuggestions() {
+		// Reset everything
+		quickInput = '';
+		createdIssue = null;
 	}
 
 	function editManually() {
@@ -96,7 +104,24 @@
 </script>
 
 <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-	{#if !expandedResult}
+	{#if createdIssue}
+		<!-- Show follow-up suggestions after creating -->
+		<div class="space-y-4">
+			<div class="flex items-center gap-2 text-green-700 mb-2">
+				<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+				</svg>
+				<span class="font-medium">Created: {createdIssue.title}</span>
+				<a
+					href="/issue/{createdIssue.id}"
+					class="text-sm text-blue-600 hover:text-blue-700 ml-auto"
+				>
+					View →
+				</a>
+			</div>
+			<FollowUpSuggestions issue={createdIssue} onDismiss={dismissSuggestions} />
+		</div>
+	{:else if !expandedResult}
 		<!-- Quick input mode -->
 		<div class="flex gap-3">
 			<div class="flex-1 relative">

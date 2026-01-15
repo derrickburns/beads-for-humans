@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { issueStore } from '$lib/stores/issues.svelte';
@@ -7,9 +8,27 @@
 	import IssueForm from '$lib/components/IssueForm.svelte';
 	import SuggestedActions from '$lib/components/SuggestedActions.svelte';
 	import Toast from '$lib/components/Toast.svelte';
+	import FollowUpSuggestions from '$lib/components/FollowUpSuggestions.svelte';
 
 	let id = $derived($page.params.id);
 	let issue = $derived(issueStore.getById(id));
+
+	// Check if this is a newly created issue (from ?new=true param)
+	let isNewIssue = $derived($page.url.searchParams.get('new') === 'true');
+	let showFollowUpSuggestions = $state(true);
+
+	// Clean up URL after showing suggestions
+	$effect(() => {
+		if (browser && isNewIssue) {
+			const url = new URL(window.location.href);
+			url.searchParams.delete('new');
+			window.history.replaceState({}, '', url.toString());
+		}
+	});
+
+	function dismissFollowUpSuggestions() {
+		showFollowUpSuggestions = false;
+	}
 	let blockers = $derived(issue ? issueStore.getBlockers(issue.id) : []);
 	let blocking = $derived(issue ? issueStore.getBlocking(issue.id) : []);
 
@@ -386,6 +405,11 @@
 							</button>
 						</div>
 					</div>
+				{/if}
+
+				<!-- Follow-up Suggestions (shown for newly created issues) -->
+				{#if isNewIssue && showFollowUpSuggestions}
+					<FollowUpSuggestions {issue} onDismiss={dismissFollowUpSuggestions} />
 				{/if}
 
 				<!-- Description -->
