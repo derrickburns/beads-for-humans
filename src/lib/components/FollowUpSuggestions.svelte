@@ -204,12 +204,42 @@
 
 	{#if createdIds.size > 0}
 		<div class="mt-4 pt-4 border-t border-blue-200">
-			<p class="text-sm text-green-700 flex items-center gap-2">
+			<p class="text-sm text-green-700 flex items-center gap-2 mb-3">
 				<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
 				</svg>
 				{createdIds.size} task{createdIds.size > 1 ? 's' : ''} created
 			</p>
+
+			<!-- Next step guidance -->
+			<div class="bg-white rounded-lg border border-green-200 p-4">
+				<h4 class="font-medium text-gray-900 mb-2 flex items-center gap-2">
+					<svg class="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+					</svg>
+					What's next?
+				</h4>
+				<p class="text-sm text-gray-600 mb-3">
+					Your tasks are set up! Now you can:
+				</p>
+				<div class="flex flex-wrap gap-2">
+					<a
+						href="/"
+						class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+					>
+						<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+						</svg>
+						See All Tasks
+					</a>
+					<button
+						onclick={onDismiss}
+						class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+					>
+						Stay Here
+					</button>
+				</div>
+			</div>
 		</div>
 	{/if}
 </div>

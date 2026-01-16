@@ -2,7 +2,7 @@
 	import { issueStore } from '$lib/stores/issues.svelte';
 	import { aiSettings } from '$lib/stores/aiSettings.svelte';
 	import { sessionState } from '$lib/stores/sessionState.svelte';
-	import type { Issue, IssueType, IssuePriority, DialogMessage as StoredDialogMessage, ImageAttachment } from '$lib/types/issue';
+	import type { Issue, IssueType, IssuePriority, DialogMessage as StoredDialogMessage, ImageAttachment, FileAttachment } from '$lib/types/issue';
 
 	interface Props {
 		issue: Issue;
@@ -55,14 +55,18 @@
 	let messagesContainer = $state<HTMLDivElement | null>(null);
 	let hasInitialized = $state(false);
 
-	// Image upload state
+	// File upload state
 	let pendingImages = $state<ImageAttachment[]>([]);
+	let pendingFiles = $state<FileAttachment[]>([]);
 	let fileInput = $state<HTMLInputElement | null>(null);
 	let isDragging = $state(false);
 
-	// Generate unique ID for images
+	// Get stored files for this issue
+	let storedFiles = $derived(issueStore.getFiles(issue.id));
+
+	// Generate unique ID
 	function generateId(): string {
-		return `img_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+		return `file_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 	}
 
 	// Convert file to base64
@@ -80,6 +84,16 @@
 		});
 	}
 
+	// Read file as text
+	async function fileToText(file: File): Promise<string> {
+		return new Promise((resolve, reject) => {
+			const reader = new FileReader();
+			reader.onload = () => resolve(reader.result as string);
+			reader.onerror = reject;
+			reader.readAsText(file);
+		});
+	}
+
 	// Handle file selection
 	async function handleFileSelect(e: Event) {
 		const input = e.target as HTMLInputElement;
@@ -93,20 +107,49 @@
 
 	// Process files (from input or drag-drop)
 	async function processFiles(files: File[]) {
-		const imageFiles = files.filter(f => f.type.startsWith('image/'));
-
-		for (const file of imageFiles.slice(0, 5)) {  // Limit to 5 images
+		for (const file of files.slice(0, 5)) {  // Limit to 5 files total
 			try {
-				const base64 = await fileToBase64(file);
-				const attachment: ImageAttachment = {
-					id: generateId(),
-					data: base64,
-					mimeType: file.type,
-					name: file.name
-				};
-				pendingImages = [...pendingImages, attachment];
+				if (file.type.startsWith('image/')) {
+					// Handle images
+					const base64 = await fileToBase64(file);
+					const attachment: ImageAttachment = {
+						id: generateId(),
+						data: base64,
+						mimeType: file.type,
+						name: file.name
+					};
+					pendingImages = [...pendingImages, attachment];
+				} else {
+					// Handle other files (JSON, CSV, etc.)
+					const base64 = await fileToBase64(file);
+					let parsedContent: unknown = undefined;
+
+					// Try to parse JSON files
+					if (file.type === 'application/json' || file.name.endsWith('.json')) {
+						try {
+							const textContent = await fileToText(file);
+							parsedContent = JSON.parse(textContent);
+						} catch {
+							console.warn('Failed to parse JSON file:', file.name);
+						}
+					}
+
+					const fileAttachment: FileAttachment = {
+						id: generateId(),
+						name: file.name,
+						mimeType: file.type || 'application/octet-stream',
+						size: file.size,
+						data: base64,
+						uploadedAt: new Date().toISOString(),
+						parsedContent
+					};
+
+					// Store file immediately to the issue
+					issueStore.addFile(issue.id, fileAttachment);
+					pendingFiles = [...pendingFiles, fileAttachment];
+				}
 			} catch (err) {
-				console.error('Failed to process image:', err);
+				console.error('Failed to process file:', err);
 			}
 		}
 	}
@@ -114,6 +157,23 @@
 	// Remove a pending image
 	function removeImage(id: string) {
 		pendingImages = pendingImages.filter(img => img.id !== id);
+	}
+
+	// Remove a pending file
+	function removePendingFile(id: string) {
+		pendingFiles = pendingFiles.filter(f => f.id !== id);
+	}
+
+	// Delete a stored file
+	function deleteStoredFile(fileId: string) {
+		issueStore.removeFile(issue.id, fileId);
+	}
+
+	// Format file size
+	function formatFileSize(bytes: number): string {
+		if (bytes < 1024) return `${bytes} B`;
+		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 	}
 
 	// Handle drag events
@@ -241,29 +301,40 @@
 	}
 
 	async function sendMessage(content: string) {
-		if ((!content.trim() && pendingImages.length === 0) || isLoading || !aiSettings.isConfigured) return;
+		const hasContent = content.trim() || pendingImages.length > 0 || pendingFiles.length > 0;
+		if (!hasContent || isLoading || !aiSettings.isConfigured) return;
 
 		// Check for URLs and fetch their content
 		const urls = extractUrls(content);
 		let urlContents: Array<{ url: string; content: string }> = [];
 
-		// Capture current pending images before clearing
+		// Capture current pending items before clearing
 		const imagesToSend = [...pendingImages];
+		const filesToSend = [...pendingFiles];
+
+		// Build content description
+		const attachmentDesc = [
+			imagesToSend.length > 0 ? `${imagesToSend.length} image(s)` : '',
+			filesToSend.length > 0 ? `${filesToSend.length} file(s): ${filesToSend.map(f => f.name).join(', ')}` : ''
+		].filter(Boolean).join(' and ');
+
+		const messageContent = content.trim() || (attachmentDesc ? `[Attached ${attachmentDesc}]` : '');
 
 		const userMessage: DialogMessage = {
 			role: 'user',
-			content: content.trim() || (imagesToSend.length > 0 ? `[Attached ${imagesToSend.length} image(s)]` : ''),
+			content: messageContent,
 			urlsReferenced: urls.length > 0 ? urls : undefined
 		};
 		messages = [...messages, userMessage];
 		inputValue = '';
 		pendingImages = [];  // Clear pending images
+		pendingFiles = [];   // Clear pending files
 		isLoading = true;
 
 		// Persist user message to store immediately - this is the AI's long-term memory
 		issueStore.addDialogMessage(issue.id, {
 			role: 'user',
-			content: content.trim() || (imagesToSend.length > 0 ? `[Attached ${imagesToSend.length} image(s)]` : ''),
+			content: messageContent,
 			urlsReferenced: urls.length > 0 ? urls : undefined,
 			images: imagesToSend.length > 0 ? imagesToSend : undefined
 		});
@@ -326,16 +397,46 @@
 				relatedDialogs
 			};
 
+			// Build message for AI - include file parsing instructions if files present
+			let aiMessage = content.trim();
+			if (filesToSend.length > 0) {
+				const fileDescriptions = filesToSend.map(f => {
+					if (f.parsedContent) {
+						return `File "${f.name}" (parsed JSON data attached)`;
+					}
+					return `File "${f.name}" (${f.mimeType})`;
+				}).join(', ');
+				aiMessage = aiMessage || `Please analyze the uploaded file(s): ${fileDescriptions}`;
+			} else if (imagesToSend.length > 0 && !aiMessage) {
+				aiMessage = 'Please analyze the attached image(s) and extract any relevant information.';
+			}
+
+			// Get all stored files for context
+			const allStoredFiles = issueStore.getFiles(issue.id);
+
 			const response = await fetch('/api/task-dialog', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					task: issue,
-					message: content.trim() || (imagesToSend.length > 0 ? 'Please analyze the attached image(s) and extract any relevant information.' : ''),
+					message: aiMessage,
 					history: messages.filter(m => !m.actions).map(m => ({ role: m.role, content: m.content })),
 					context: richContext,
 					urlContents: urlContents.length > 0 ? urlContents : undefined,
 					images: imagesToSend.length > 0 ? imagesToSend : undefined,
+					files: filesToSend.length > 0 ? filesToSend.map(f => ({
+						name: f.name,
+						mimeType: f.mimeType,
+						size: f.size,
+						parsedContent: f.parsedContent
+					})) : undefined,
+					storedFiles: allStoredFiles.length > 0 ? allStoredFiles.map(f => ({
+						name: f.name,
+						mimeType: f.mimeType,
+						size: f.size,
+						parsedContent: f.parsedContent,
+						summary: f.summary
+					})) : undefined,
 					model,
 					apiKey
 				})
@@ -659,11 +760,49 @@
 				</div>
 			{/if}
 
-			<!-- Hidden file input -->
+			<!-- Stored Files Section -->
+			{#if storedFiles.length > 0}
+				<div class="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+					<div class="flex items-center justify-between mb-2">
+						<span class="text-xs font-medium text-gray-500 uppercase tracking-wide">Attached Files ({storedFiles.length})</span>
+					</div>
+					<div class="space-y-1.5">
+						{#each storedFiles as file}
+							<div class="flex items-center justify-between gap-2 p-2 bg-white rounded border border-gray-200 group">
+								<div class="flex items-center gap-2 min-w-0">
+									<svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										{#if file.mimeType.includes('json')}
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+										{:else}
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+										{/if}
+									</svg>
+									<span class="text-sm text-gray-700 truncate">{file.name}</span>
+									<span class="text-xs text-gray-400">({formatFileSize(file.size)})</span>
+									{#if file.parsedContent}
+										<span class="px-1.5 py-0.5 text-xs bg-green-100 text-green-700 rounded">Parsed</span>
+									{/if}
+								</div>
+								<button
+									onclick={() => deleteStoredFile(file.id)}
+									class="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+									title="Remove file"
+								>
+									<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+									</svg>
+								</button>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			<!-- Hidden file input - accepts images, JSON, CSV, and other files -->
 			<input
 				bind:this={fileInput}
 				type="file"
-				accept="image/*"
+				accept="image/*,.json,.csv,.txt,.pdf,application/json,text/csv,text/plain,application/pdf"
 				multiple
 				class="hidden"
 				onchange={handleFileSelect}
@@ -683,16 +822,16 @@
 					onclick={() => fileInput?.click()}
 					disabled={isLoading}
 					class="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed h-10"
-					aria-label="Attach image"
-					title="Attach screenshot or image"
+					aria-label="Attach file"
+					title="Attach file (images, JSON, CSV)"
 				>
 					<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
 					</svg>
 				</button>
 				<button
 					onclick={() => sendMessage(inputValue)}
-					disabled={(!inputValue.trim() && pendingImages.length === 0) || isLoading}
+					disabled={(!inputValue.trim() && pendingImages.length === 0 && pendingFiles.length === 0) || isLoading}
 					class="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors h-10"
 					aria-label="Send message"
 				>

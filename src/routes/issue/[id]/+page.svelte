@@ -508,6 +508,82 @@
 					<FollowUpSuggestions {issue} onDismiss={dismissFollowUpSuggestions} />
 				{/if}
 
+				<!-- Getting Started Guidance (for tasks without dialog history) -->
+				{#if issue.status === 'open' && (!issue.dialogHistory || issue.dialogHistory.length === 0) && !isNewIssue}
+					<div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-5">
+						<div class="flex items-start gap-3">
+							<div class="p-2 bg-blue-100 rounded-lg">
+								<svg class="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+								</svg>
+							</div>
+							<div class="flex-1">
+								<h3 class="font-semibold text-gray-900 mb-1">What would you like to do?</h3>
+								<p class="text-sm text-gray-600 mb-4">Here are your options for this task:</p>
+								<div class="grid gap-2 sm:grid-cols-2">
+									<button
+										onclick={() => (showTaskDialog = true)}
+										class="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all text-left"
+									>
+										<div class="p-2 bg-blue-100 rounded-lg">
+											<svg class="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+											</svg>
+										</div>
+										<div>
+											<div class="font-medium text-gray-900">Talk to AI</div>
+											<div class="text-xs text-gray-500">Get help, provide info, or ask questions</div>
+										</div>
+									</button>
+									<button
+										onclick={() => handleStatusChange('in_progress')}
+										class="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-green-300 hover:bg-green-50 transition-all text-left"
+									>
+										<div class="p-2 bg-green-100 rounded-lg">
+											<svg class="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+											</svg>
+										</div>
+										<div>
+											<div class="font-medium text-gray-900">Start Working</div>
+											<div class="text-xs text-gray-500">Mark as in progress</div>
+										</div>
+									</button>
+									<button
+										onclick={() => handleStatusChange('closed')}
+										class="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-all text-left"
+									>
+										<div class="p-2 bg-purple-100 rounded-lg">
+											<svg class="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+											</svg>
+										</div>
+										<div>
+											<div class="font-medium text-gray-900">Already Done</div>
+											<div class="text-xs text-gray-500">Mark as complete</div>
+										</div>
+									</button>
+									<a
+										href="/"
+										class="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all text-left"
+									>
+										<div class="p-2 bg-gray-100 rounded-lg">
+											<svg class="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+											</svg>
+										</div>
+										<div>
+											<div class="font-medium text-gray-900">View All Tasks</div>
+											<div class="text-xs text-gray-500">Return to task list</div>
+										</div>
+									</a>
+								</div>
+							</div>
+						</div>
+					</div>
+				{/if}
+
 				<!-- Description -->
 				<div>
 					<h3 class="text-sm font-medium text-gray-500 mb-2">Description</h3>

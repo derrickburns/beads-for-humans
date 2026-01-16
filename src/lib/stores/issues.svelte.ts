@@ -530,6 +530,35 @@ class IssueStore {
 		return issue?.dialogHistory || [];
 	}
 
+	// === File Management ===
+
+	addFile(
+		issueId: string,
+		file: import('$lib/types/issue').FileAttachment
+	): import('$lib/types/issue').Issue | undefined {
+		const issue = this.getById(issueId);
+		if (!issue) return undefined;
+
+		const existingFiles = issue.files || [];
+		return this.update(issueId, {
+			files: [...existingFiles, file]
+		});
+	}
+
+	removeFile(issueId: string, fileId: string): import('$lib/types/issue').Issue | undefined {
+		const issue = this.getById(issueId);
+		if (!issue?.files) return undefined;
+
+		return this.update(issueId, {
+			files: issue.files.filter(f => f.id !== fileId)
+		});
+	}
+
+	getFiles(issueId: string): import('$lib/types/issue').FileAttachment[] {
+		const issue = this.getById(issueId);
+		return issue?.files || [];
+	}
+
 	// Get dialog context from related issues (parent, siblings) for richer AI context
 	getRelatedDialogContext(issueId: string): Array<{
 		issueId: string;

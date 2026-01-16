@@ -44,6 +44,18 @@ export interface ImageAttachment {
 	name?: string;       // original filename
 }
 
+// File attachment for storing documents on issues
+export interface FileAttachment {
+	id: string;
+	name: string;           // original filename
+	mimeType: string;       // application/json, text/csv, etc.
+	size: number;           // file size in bytes
+	data: string;           // base64 encoded file data
+	uploadedAt: string;     // ISO timestamp
+	parsedContent?: unknown; // Parsed content for structured files (JSON, CSV)
+	summary?: string;       // AI-generated summary of the file
+}
+
 // Dialog message for task conversations
 export interface DialogMessage {
 	role: 'user' | 'assistant';
@@ -365,6 +377,9 @@ export interface Issue {
 
 	// === Dialog History ===
 	dialogHistory?: DialogMessage[];         // Conversation history for this task
+
+	// === Attached Files ===
+	files?: FileAttachment[];                // Files uploaded to this task
 
 	// === AI Agenda ===
 	aiAgenda?: AIAgenda;                     // What AI wants to do/ask/gather

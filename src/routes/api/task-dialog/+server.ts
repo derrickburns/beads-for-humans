@@ -150,14 +150,25 @@ Keep it conversational and brief (2-3 sentences max). Don't be generic - tailor 
 		}
 	}
 
+	// File reference type for uploaded files
+	interface FileRef {
+		name: string;
+		mimeType: string;
+		size: number;
+		parsedContent?: unknown;
+		summary?: string;
+	}
+
 	// Regular message handling
-	const { task, message, history, context, urlContents, images, model, apiKey } = body as {
+	const { task, message, history, context, urlContents, images, files, storedFiles, model, apiKey } = body as {
 		task: Issue;
 		message: string;
 		history: DialogMessage[];
 		context: RichContext;
 		urlContents?: UrlContent[];
 		images?: ImageAttachment[];  // Screenshots/images attached to this message
+		files?: FileRef[];           // Newly uploaded files with parsed content
+		storedFiles?: FileRef[];     // Previously stored files on this task
 		model?: string;
 		apiKey?: string;
 	};
@@ -259,6 +270,40 @@ IMPORTANT: These are verbatim conversations from related tasks. Use this context
 3. Understand what the user has already shared
 
 ${dialogSections}`);
+	}
+
+	// Uploaded files with parsed content
+	const allFiles = [...(files || []), ...(storedFiles || [])];
+	if (allFiles.length > 0) {
+		const fileSections = allFiles.map(f => {
+			let fileInfo = `### File: "${f.name}" (${f.mimeType}, ${Math.round(f.size / 1024)}KB)`;
+			if (f.summary) {
+				fileInfo += `\nSummary: ${f.summary}`;
+			}
+			if (f.parsedContent) {
+				// For JSON files, include the parsed content so AI can analyze it
+				const contentStr = typeof f.parsedContent === 'string'
+					? f.parsedContent
+					: JSON.stringify(f.parsedContent, null, 2);
+				// Limit content length to avoid token limits
+				const maxLength = 50000;
+				if (contentStr.length > maxLength) {
+					fileInfo += `\nParsed Content (truncated to first ${maxLength} chars):\n\`\`\`json\n${contentStr.substring(0, maxLength)}...\n\`\`\``;
+				} else {
+					fileInfo += `\nParsed Content:\n\`\`\`json\n${contentStr}\n\`\`\``;
+				}
+			}
+			return fileInfo;
+		}).join('\n\n');
+
+		contextSections.push(`## Uploaded Files
+IMPORTANT: The user has uploaded the following files. Analyze the data carefully and:
+1. Extract relevant information for this task
+2. Identify key data points, accounts, balances, etc.
+3. Store important extracted data in your responses
+4. Reference specific values from the files when relevant
+
+${fileSections}`);
 	}
 
 	// URL contents shared by user
