@@ -45,6 +45,43 @@ export interface DialogMessage {
 	actionsApplied?: string[];  // Actions that were applied from this message
 }
 
+// AI Agenda - what the AI wants to do/ask/gather
+// This drives proactive behavior when human is available or absent
+export interface AIAgendaItem {
+	id: string;
+	type: 'question' | 'resource_request' | 'background_task' | 'access_request';
+	priority: 'blocking' | 'important' | 'nice_to_have';
+	status: 'pending' | 'in_progress' | 'completed' | 'blocked';
+	createdAt: string;
+	completedAt?: string;
+
+	// For questions
+	question?: string;
+	context?: string;           // Why we need this
+	suggestedAnswers?: string[]; // Help human answer quickly
+
+	// For resource requests
+	resourceType?: 'web_page' | 'document' | 'api' | 'account';
+	resourceUrl?: string;
+	resourceDescription?: string;
+
+	// For access requests
+	accessType?: 'read' | 'write' | 'admin';
+	serviceName?: string;       // e.g., "Geico account", "Bank portal"
+	whyNeeded?: string;
+
+	// For background tasks
+	taskDescription?: string;
+	canRunWithoutHuman?: boolean;
+	estimatedDuration?: string;
+}
+
+export interface AIAgenda {
+	items: AIAgendaItem[];
+	lastUpdated: string;
+	nextHumanQuestion?: string;  // The most important thing to ask human
+}
+
 // Human attention tracking
 export interface NeedsHumanReason {
 	trigger: NeedsHumanTrigger;
@@ -194,6 +231,9 @@ export interface Issue {
 
 	// === Dialog History ===
 	dialogHistory?: DialogMessage[];         // Conversation history for this task
+
+	// === AI Agenda ===
+	aiAgenda?: AIAgenda;                     // What AI wants to do/ask/gather
 
 	// === Scope & Constraints ===
 	scopeBoundary?: ScopeBoundary;           // What's in/out of scope (for goals)

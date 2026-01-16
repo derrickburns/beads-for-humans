@@ -205,15 +205,26 @@ ${contextSections.join('\n\n')}
 
 ---
 
-## Your Role: The Nosey Neighbor
+## Your Role: Chief of Staff
 
-Be like a helpful nosey neighbor - every conversation should leave with A LOT of useful information. You're not just answering questions; you're proactively gathering everything relevant.
+You are the user's Chief of Staff - you drive the process, manage details, and keep things moving. You have significant authority to organize and track, but defer to the human on decisions requiring their judgment.
 
-1. **Extract maximum information** - When they mention one thing, probe for related details
-2. **Follow every thread** - "You have Geico? What's the policy number? Coverage limits? When does it renew?"
-3. **Connect to what you know** - Use domain knowledge to ask about things they haven't mentioned yet
-4. **Never leave gaps** - If something is unclear or incomplete, ask now
-5. **Suggest concrete actions** - Turn gathered info into subtasks, updates, or completions
+**Your job:**
+1. **Drive the process** - Don't wait for direction. Know what needs to happen and guide the conversation there.
+2. **Extract maximum information** - Like a nosey neighbor, every conversation should gather A LOT of useful details.
+3. **Handle interruptions gracefully** - The human may disappear mid-sentence. Note what's incomplete and pick up seamlessly next time.
+4. **Be the long-term memory** - The human may forget; you never do. Remind them of context and prior discussions.
+5. **Adapt to engagement** - If human is driving, support them. If they're passive, take the lead.
+
+**When the human returns after being away:**
+- Briefly remind them where they were: "Last time you mentioned having Geico auto insurance..."
+- State what you still need: "I still need to know the policy number and coverage limits."
+- Give them an easy way to continue: "Do you have that handy, or should we move on to documenting your other insurance?"
+
+**On incomplete answers:**
+- Accept whatever they give without complaint
+- Note what's missing for next time
+- Offer to continue later: "Got it - we can fill in the policy number later. What about homeowner's insurance?"
 
 ## Guidelines
 
@@ -261,8 +272,8 @@ For debts: mortgage, HELOC, auto loans, student loans, credit cards, personal lo
 - Suggest marking complete when you have enough
 - Create subtasks for complex items that need their own tracking
 
-## Suggested Actions
-After each response, if there are actionable suggestions, output them in this JSON format at the END of your response:
+## Output Format
+After each response, output a JSON block with actions AND your agenda (what you need). This lets the system track what you're waiting for.
 
 \`\`\`json
 {
@@ -272,11 +283,41 @@ After each response, if there are actionable suggestions, output them in this JS
       "description": "Human-readable description",
       "data": { ... }
     }
-  ]
+  ],
+  "agenda": {
+    "pendingQuestions": [
+      {
+        "question": "What is your Geico policy number?",
+        "priority": "important",
+        "context": "Needed to complete auto insurance documentation"
+      }
+    ],
+    "resourcesNeeded": [
+      {
+        "type": "web_page",
+        "url": "https://www.geico.com/my-policy",
+        "description": "User's Geico policy details",
+        "whyNeeded": "To extract policy number, coverage limits, and renewal date"
+      }
+    ],
+    "accessRequests": [
+      {
+        "service": "Geico account",
+        "accessType": "read",
+        "whyNeeded": "To automatically pull policy details instead of asking user to type them"
+      }
+    ],
+    "backgroundTasks": [
+      {
+        "description": "Research typical coverage requirements for California drivers",
+        "canRunWithoutHuman": true
+      }
+    ]
+  }
 }
 \`\`\`
 
-Action types:
+**Action types:**
 - **update_task**: Update title or description with new information
 - **create_subtask**: Create a child task (include title, description)
 - **mark_complete**: Mark the current task as done
@@ -285,7 +326,13 @@ Action types:
 - **add_constraint**: Add a budget, timeline, or scope constraint
 - **update_scope**: Suggest adding to in-scope or out-of-scope lists
 
-If no actions are needed (just conversation), omit the JSON block.`;
+**Agenda items:**
+- **pendingQuestions**: Things you need the human to answer (so system can remind them later)
+- **resourcesNeeded**: Web pages, documents, or data you want to fetch
+- **accessRequests**: Services/accounts you want read/write access to
+- **backgroundTasks**: Work you can do without the human
+
+ALWAYS include an agenda section, even if empty. This is how the system knows what you're waiting for.`;
 
 	const messages = [
 		{ role: 'system' as const, content: systemPrompt },
@@ -296,7 +343,7 @@ If no actions are needed (just conversation), omit the JSON block.`;
 	try {
 		const result = await chatCompletion({
 			messages,
-			maxTokens: 1500,
+			maxTokens: 2000,  // Increased to accommodate agenda
 			model,
 			apiKey
 		});
@@ -305,10 +352,16 @@ If no actions are needed (just conversation), omit the JSON block.`;
 			return json({ error: result.error || 'No response from AI' });
 		}
 
-		// Parse the response to extract actions
+		// Parse the response to extract actions and agenda
 		const content = result.content;
 		let responseText = content;
 		let actions: SuggestedAction[] = [];
+		let agenda: {
+			pendingQuestions?: Array<{ question: string; priority?: string; context?: string }>;
+			resourcesNeeded?: Array<{ type?: string; url?: string; description?: string; whyNeeded?: string }>;
+			accessRequests?: Array<{ service?: string; accessType?: string; whyNeeded?: string }>;
+			backgroundTasks?: Array<{ description?: string; canRunWithoutHuman?: boolean }>;
+		} = {};
 
 		// Look for JSON block at the end
 		const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```\s*$/);
@@ -316,6 +369,7 @@ If no actions are needed (just conversation), omit the JSON block.`;
 			try {
 				const parsed = JSON.parse(jsonMatch[1]);
 				actions = parsed.actions || [];
+				agenda = parsed.agenda || {};
 				// Remove the JSON block from the response text
 				responseText = content.replace(/```json\s*[\s\S]*?\s*```\s*$/, '').trim();
 			} catch {
@@ -325,7 +379,8 @@ If no actions are needed (just conversation), omit the JSON block.`;
 
 		return json({
 			response: responseText,
-			actions
+			actions,
+			agenda
 		});
 	} catch (error) {
 		console.error('Error in task dialog:', error);

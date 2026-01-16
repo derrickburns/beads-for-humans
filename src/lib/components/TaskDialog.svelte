@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { issueStore } from '$lib/stores/issues.svelte';
 	import { aiSettings } from '$lib/stores/aiSettings.svelte';
+	import { sessionState } from '$lib/stores/sessionState.svelte';
 	import type { Issue, IssueType, IssuePriority, DialogMessage as StoredDialogMessage } from '$lib/types/issue';
 
 	interface Props {
@@ -43,6 +44,11 @@
 			actionsApplied: m.actionsApplied
 		}));
 	}
+
+	// Track that user is working on this task
+	$effect(() => {
+		sessionState.setActiveTask(issue.id, issue.title);
+	});
 
 	let messages = $state<DialogMessage[]>(loadExistingHistory());
 	let inputValue = $state('');
@@ -215,6 +221,28 @@
 					role: 'assistant',
 					content: data.response
 				});
+
+				// Process the AI's agenda - track what it's waiting for
+				if (data.agenda) {
+					// Store pending questions so we can remind user later
+					if (data.agenda.pendingQuestions) {
+						for (const pq of data.agenda.pendingQuestions) {
+							sessionState.addPendingQuestion(
+								issue.id,
+								issue.title,
+								pq.question,
+								pq.context
+							);
+						}
+					}
+
+					// TODO: Handle resourcesNeeded - queue for background fetching
+					// TODO: Handle accessRequests - prompt user for credentials
+					// TODO: Handle backgroundTasks - queue for background processing
+				}
+
+				// Record interaction for session tracking
+				sessionState.recordInteraction();
 			}
 		} catch (error) {
 			const errorMessage: DialogMessage = {
