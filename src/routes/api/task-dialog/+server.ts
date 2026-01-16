@@ -3,6 +3,97 @@ import type { RequestHandler } from './$types';
 import type { Issue, IssueType, IssuePriority, ScopeBoundary, Constraint, Concern, ImageAttachment } from '$lib/types/issue';
 import { chatCompletion, buildVisionContent } from '$lib/ai/provider';
 
+// Fuzzy matching utilities for duplicate/overlap detection
+function normalizeText(text: string): string {
+	return text
+		.toLowerCase()
+		.replace(/[^a-z0-9\s]/g, '') // Remove punctuation
+		.replace(/\s+/g, ' ')        // Normalize whitespace
+		.trim();
+}
+
+function getWords(text: string): Set<string> {
+	const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by']);
+	return new Set(
+		normalizeText(text)
+			.split(' ')
+			.filter(w => w.length > 2 && !stopWords.has(w))
+	);
+}
+
+function calculateSimilarity(text1: string, text2: string): number {
+	const words1 = getWords(text1);
+	const words2 = getWords(text2);
+
+	if (words1.size === 0 || words2.size === 0) return 0;
+
+	const intersection = new Set([...words1].filter(w => words2.has(w)));
+	const union = new Set([...words1, ...words2]);
+
+	// Jaccard similarity
+	return intersection.size / union.size;
+}
+
+interface OverlapResult {
+	hasOverlap: boolean;
+	overlapType: 'duplicate' | 'subset' | 'superset' | 'partial' | 'none';
+	matchingTask?: { id: string; title: string };
+	similarity: number;
+}
+
+function detectOverlap(proposedTitle: string, existingTasks: Array<{ id: string; title: string; description?: string }>): OverlapResult {
+	const proposedWords = getWords(proposedTitle);
+
+	for (const task of existingTasks) {
+		const taskWords = getWords(task.title);
+		const similarity = calculateSimilarity(proposedTitle, task.title);
+
+		// High similarity = likely duplicate
+		if (similarity > 0.7) {
+			return {
+				hasOverlap: true,
+				overlapType: 'duplicate',
+				matchingTask: task,
+				similarity
+			};
+		}
+
+		// Check if proposed is subset of existing (existing covers this)
+		const proposedInTask = [...proposedWords].filter(w => taskWords.has(w)).length;
+		if (proposedWords.size > 0 && proposedInTask / proposedWords.size > 0.8) {
+			return {
+				hasOverlap: true,
+				overlapType: 'subset',
+				matchingTask: task,
+				similarity
+			};
+		}
+
+		// Check if proposed is superset of existing (proposed would replace existing)
+		const taskInProposed = [...taskWords].filter(w => proposedWords.has(w)).length;
+		if (taskWords.size > 0 && taskInProposed / taskWords.size > 0.8) {
+			return {
+				hasOverlap: true,
+				overlapType: 'superset',
+				matchingTask: task,
+				similarity
+			};
+		}
+
+		// Partial overlap
+		if (similarity > 0.4) {
+			return {
+				hasOverlap: true,
+				overlapType: 'partial',
+				matchingTask: task,
+				similarity
+			};
+		}
+	}
+
+	return { hasOverlap: false, overlapType: 'none', similarity: 0 };
+}
+
 interface DialogMessage {
 	role: 'user' | 'assistant';
 	content: string;
@@ -723,6 +814,16 @@ Use these entity names consistently:
 				.map(a => a.data?.title?.toLowerCase())
 		);
 
+		// Get existing project tasks for overlap detection
+		const existingTasks = context.projectIssues.map(i => ({
+			id: i.id,
+			title: i.title,
+			description: i.description
+		}));
+
+		// Track filtered duplicates for user feedback
+		const filteredDuplicates: Array<{ proposed: string; existing: string; reason: string }> = [];
+
 		// Match numbered list items like "1. **Title:** description" or "1. **Title**\n   - description"
 		const numberedListPattern = /^\s*\d+\.\s*\*\*([^*:]+?)(?::\*\*|\*\*:?)\s*(.*)$/gm;
 		let match;
@@ -733,16 +834,79 @@ Use these entity names consistently:
 			// Skip if we already have an action for this
 			if (existingSubtaskTitles.has(title.toLowerCase())) continue;
 
-			// Add as a create_subtask action
-			actions.push({
-				type: 'create_subtask',
-				description: `Create subtask: ${title}`,
-				data: {
-					title,
-					description: description || undefined,
-					type: 'task' as IssueType
+			// Check for overlap with existing tasks
+			const overlap = detectOverlap(title, existingTasks);
+
+			if (overlap.hasOverlap && overlap.matchingTask) {
+				// Track what was filtered and why
+				const reasonMap = {
+					duplicate: `Already exists as "${overlap.matchingTask.title}"`,
+					subset: `Covered by existing task "${overlap.matchingTask.title}"`,
+					superset: `Would overlap with "${overlap.matchingTask.title}"`,
+					partial: `Overlaps with "${overlap.matchingTask.title}"`,
+					none: ''
+				};
+
+				filteredDuplicates.push({
+					proposed: title,
+					existing: overlap.matchingTask.title,
+					reason: reasonMap[overlap.overlapType]
+				});
+
+				// Skip duplicates and subsets entirely
+				if (overlap.overlapType === 'duplicate' || overlap.overlapType === 'subset') {
+					continue;
 				}
-			});
+
+				// For superset/partial, still create but note the overlap
+				actions.push({
+					type: 'create_subtask',
+					description: `Create subtask: ${title} (Note: overlaps with "${overlap.matchingTask.title}")`,
+					data: {
+						title,
+						description: description || undefined,
+						type: 'task' as IssueType
+					}
+				});
+			} else {
+				// No overlap - add normally
+				actions.push({
+					type: 'create_subtask',
+					description: `Create subtask: ${title}`,
+					data: {
+						title,
+						description: description || undefined,
+						type: 'task' as IssueType
+					}
+				});
+			}
+		}
+
+		// Also filter any actions that came from AI's JSON that overlap
+		actions = actions.filter(action => {
+			if (action.type !== 'create_subtask' || !action.data?.title) return true;
+
+			const overlap = detectOverlap(action.data.title, existingTasks);
+			if (overlap.hasOverlap && overlap.matchingTask &&
+				(overlap.overlapType === 'duplicate' || overlap.overlapType === 'subset')) {
+				filteredDuplicates.push({
+					proposed: action.data.title,
+					existing: overlap.matchingTask.title,
+					reason: overlap.overlapType === 'duplicate'
+						? `Already exists as "${overlap.matchingTask.title}"`
+						: `Covered by "${overlap.matchingTask.title}"`
+				});
+				return false;
+			}
+			return true;
+		});
+
+		// Append a note about filtered duplicates to the response
+		if (filteredDuplicates.length > 0) {
+			const notes = filteredDuplicates
+				.map(d => `• "${d.proposed}" - ${d.reason}`)
+				.join('\n');
+			responseText += `\n\n*Note: ${filteredDuplicates.length} suggestion(s) filtered as duplicates/overlaps:*\n${notes}`;
 		}
 
 		return json({
