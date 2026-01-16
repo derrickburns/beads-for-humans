@@ -3,95 +3,153 @@ import type { RequestHandler } from './$types';
 import type { Issue, IssueType, IssuePriority, ScopeBoundary, Constraint, Concern, ImageAttachment } from '$lib/types/issue';
 import { chatCompletion, buildVisionContent } from '$lib/ai/provider';
 
-// Fuzzy matching utilities for duplicate/overlap detection
-function normalizeText(text: string): string {
-	return text
-		.toLowerCase()
-		.replace(/[^a-z0-9\s]/g, '') // Remove punctuation
-		.replace(/\s+/g, ' ')        // Normalize whitespace
-		.trim();
+// Graph-aware overlap detection
+// Uses DAG structure to only check relevant tasks, then uses AI for semantic comparison
+
+interface OverlapCheckTask {
+	id: string;
+	title: string;
+	relationship: 'current' | 'child' | 'sibling' | 'ancestor' | 'dependency';
 }
 
-function getWords(text: string): Set<string> {
-	const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by']);
-	return new Set(
-		normalizeText(text)
-			.split(' ')
-			.filter(w => w.length > 2 && !stopWords.has(w))
-	);
-}
-
-function calculateSimilarity(text1: string, text2: string): number {
-	const words1 = getWords(text1);
-	const words2 = getWords(text2);
-
-	if (words1.size === 0 || words2.size === 0) return 0;
-
-	const intersection = new Set([...words1].filter(w => words2.has(w)));
-	const union = new Set([...words1, ...words2]);
-
-	// Jaccard similarity
-	return intersection.size / union.size;
-}
-
-interface OverlapResult {
+interface SemanticOverlapResult {
 	hasOverlap: boolean;
-	overlapType: 'duplicate' | 'subset' | 'superset' | 'partial' | 'none';
-	matchingTask?: { id: string; title: string };
-	similarity: number;
+	overlapType: 'duplicate' | 'subset' | 'covered_by_parent' | 'already_child' | 'parallel_work' | 'none';
+	matchingTask?: { id: string; title: string; relationship: string };
+	reason?: string;
 }
 
-function detectOverlap(proposedTitle: string, existingTasks: Array<{ id: string; title: string; description?: string }>): OverlapResult {
-	const proposedWords = getWords(proposedTitle);
+// Build the relevant subgraph to check for overlaps
+function buildOverlapCheckList(
+	currentTask: { id: string; title: string },
+	context: {
+		children: Array<{ id: string; title: string }>;
+		siblings: Array<{ id: string; title: string }>;
+		ancestors: Array<{ id: string; title: string }>;
+		parent: { id: string; title: string } | null;
+	}
+): OverlapCheckTask[] {
+	const tasks: OverlapCheckTask[] = [];
 
-	for (const task of existingTasks) {
-		const taskWords = getWords(task.title);
-		const similarity = calculateSimilarity(proposedTitle, task.title);
+	// Always check current task (is proposed just rephrasing the parent?)
+	tasks.push({ id: currentTask.id, title: currentTask.title, relationship: 'current' });
 
-		// High similarity = likely duplicate
-		if (similarity > 0.7) {
-			return {
-				hasOverlap: true,
-				overlapType: 'duplicate',
-				matchingTask: task,
-				similarity
-			};
+	// Check existing children (is this already a subtask?)
+	for (const child of context.children || []) {
+		tasks.push({ id: child.id, title: child.title, relationship: 'child' });
+	}
+
+	// Check siblings (is this parallel work already planned?)
+	for (const sibling of context.siblings || []) {
+		tasks.push({ id: sibling.id, title: sibling.title, relationship: 'sibling' });
+	}
+
+	// Check ancestors (is this already covered by a parent task?)
+	for (const ancestor of context.ancestors || []) {
+		tasks.push({ id: ancestor.id, title: ancestor.title, relationship: 'ancestor' });
+	}
+
+	return tasks;
+}
+
+// Use AI to check semantic overlap (called once for batch of proposed tasks)
+async function checkSemanticOverlaps(
+	proposedTasks: Array<{ title: string; description?: string }>,
+	existingTasks: OverlapCheckTask[],
+	model?: string,
+	apiKey?: string
+): Promise<Map<string, SemanticOverlapResult>> {
+	const results = new Map<string, SemanticOverlapResult>();
+
+	// If no existing tasks to compare, all proposed are unique
+	if (existingTasks.length === 0) {
+		for (const proposed of proposedTasks) {
+			results.set(proposed.title, { hasOverlap: false, overlapType: 'none' });
 		}
+		return results;
+	}
 
-		// Check if proposed is subset of existing (existing covers this)
-		const proposedInTask = [...proposedWords].filter(w => taskWords.has(w)).length;
-		if (proposedWords.size > 0 && proposedInTask / proposedWords.size > 0.8) {
-			return {
-				hasOverlap: true,
-				overlapType: 'subset',
-				matchingTask: task,
-				similarity
-			};
+	// Build prompt for AI overlap check
+	const existingList = existingTasks
+		.map(t => `- [${t.relationship}] "${t.title}"`)
+		.join('\n');
+
+	const proposedList = proposedTasks
+		.map((t, i) => `${i + 1}. "${t.title}"${t.description ? ` - ${t.description}` : ''}`)
+		.join('\n');
+
+	const prompt = `You are checking for semantic overlap between proposed subtasks and existing tasks in a project DAG.
+
+EXISTING TASKS (with their relationship to current task):
+${existingList}
+
+PROPOSED SUBTASKS:
+${proposedList}
+
+For each proposed subtask, determine if it overlaps with any existing task:
+- "duplicate": Same work, just different wording
+- "already_child": Already exists as a child task
+- "covered_by_parent": The current/ancestor task already encompasses this
+- "parallel_work": A sibling task already covers this
+- "none": Truly new work, no overlap
+
+Respond with JSON array:
+[
+  { "proposed": "title", "overlap": "none|duplicate|already_child|covered_by_parent|parallel_work", "matchingTask": "title if overlap", "reason": "brief explanation" }
+]
+
+Only JSON, no other text.`;
+
+	try {
+		const result = await chatCompletion({
+			messages: [{ role: 'user', content: prompt }],
+			maxTokens: 1000,
+			model,
+			apiKey
+		});
+
+		if (result.content) {
+			// Extract JSON from response
+			const jsonMatch = result.content.match(/\[[\s\S]*\]/);
+			if (jsonMatch) {
+				const overlaps = JSON.parse(jsonMatch[0]) as Array<{
+					proposed: string;
+					overlap: string;
+					matchingTask?: string;
+					reason?: string;
+				}>;
+
+				for (const item of overlaps) {
+					const matchingExisting = item.matchingTask
+						? existingTasks.find(t => t.title.toLowerCase().includes(item.matchingTask!.toLowerCase().slice(0, 20)))
+						: undefined;
+
+					results.set(item.proposed, {
+						hasOverlap: item.overlap !== 'none',
+						overlapType: item.overlap as SemanticOverlapResult['overlapType'],
+						matchingTask: matchingExisting ? {
+							id: matchingExisting.id,
+							title: matchingExisting.title,
+							relationship: matchingExisting.relationship
+						} : undefined,
+						reason: item.reason
+					});
+				}
+			}
 		}
+	} catch (e) {
+		// If AI check fails, allow all (fail open)
+		console.error('Semantic overlap check failed:', e);
+	}
 
-		// Check if proposed is superset of existing (proposed would replace existing)
-		const taskInProposed = [...taskWords].filter(w => proposedWords.has(w)).length;
-		if (taskWords.size > 0 && taskInProposed / taskWords.size > 0.8) {
-			return {
-				hasOverlap: true,
-				overlapType: 'superset',
-				matchingTask: task,
-				similarity
-			};
-		}
-
-		// Partial overlap
-		if (similarity > 0.4) {
-			return {
-				hasOverlap: true,
-				overlapType: 'partial',
-				matchingTask: task,
-				similarity
-			};
+	// Fill in any missing results as no overlap
+	for (const proposed of proposedTasks) {
+		if (!results.has(proposed.title)) {
+			results.set(proposed.title, { hasOverlap: false, overlapType: 'none' });
 		}
 	}
 
-	return { hasOverlap: false, overlapType: 'none', similarity: 0 };
+	return results;
 }
 
 interface DialogMessage {
@@ -814,15 +872,11 @@ Use these entity names consistently:
 				.map(a => a.data?.title?.toLowerCase())
 		);
 
-		// Get existing project tasks for overlap detection
-		const existingTasks = context.projectIssues.map(i => ({
-			id: i.id,
-			title: i.title,
-			description: i.description
-		}));
-
 		// Track filtered duplicates for user feedback
 		const filteredDuplicates: Array<{ proposed: string; existing: string; reason: string }> = [];
+
+		// Collect all proposed subtasks (from both numbered lists and AI actions)
+		const proposedFromText: Array<{ title: string; description?: string }> = [];
 
 		// Match numbered list items like "1. **Title:** description" or "1. **Title**\n   - description"
 		const numberedListPattern = /^\s*\d+\.\s*\*\*([^*:]+?)(?::\*\*|\*\*:?)\s*(.*)$/gm;
@@ -834,37 +888,72 @@ Use these entity names consistently:
 			// Skip if we already have an action for this
 			if (existingSubtaskTitles.has(title.toLowerCase())) continue;
 
-			// Check for overlap with existing tasks
-			const overlap = detectOverlap(title, existingTasks);
+			proposedFromText.push({ title, description: description || undefined });
+		}
 
-			if (overlap.hasOverlap && overlap.matchingTask) {
+		// Collect proposed from AI actions too
+		const proposedFromActions = actions
+			.filter(a => a.type === 'create_subtask' && a.data?.title)
+			.map(a => ({ title: a.data!.title!, description: a.data!.description }));
+
+		// Combine all proposed subtasks for semantic overlap checking
+		const allProposed = [...proposedFromText, ...proposedFromActions];
+
+		// Build the overlap check list from DAG context
+		const overlapCheckList = buildOverlapCheckList(
+			{ id: task.id, title: task.title },
+			{
+				children: context.children.map(c => ({ id: c.id, title: c.title })),
+				siblings: context.siblings.map(s => ({ id: s.id, title: s.title })),
+				ancestors: context.ancestors.map(a => ({ id: a.id, title: a.title })),
+				parent: context.parent ? { id: context.parent.id, title: context.parent.title } : null
+			}
+		);
+
+		// Run semantic overlap check if we have proposed tasks
+		let overlapResults = new Map<string, SemanticOverlapResult>();
+		if (allProposed.length > 0 && overlapCheckList.length > 0) {
+			overlapResults = await checkSemanticOverlaps(
+				allProposed,
+				overlapCheckList,
+				model,
+				apiKey
+			);
+		}
+
+		// Add text-extracted subtasks as actions, filtering based on semantic overlap
+		for (const proposed of proposedFromText) {
+			const overlap = overlapResults.get(proposed.title);
+
+			if (overlap?.hasOverlap) {
 				// Track what was filtered and why
-				const reasonMap = {
-					duplicate: `Already exists as "${overlap.matchingTask.title}"`,
-					subset: `Covered by existing task "${overlap.matchingTask.title}"`,
-					superset: `Would overlap with "${overlap.matchingTask.title}"`,
-					partial: `Overlaps with "${overlap.matchingTask.title}"`,
+				const reasonMap: Record<string, string> = {
+					duplicate: `Already exists as "${overlap.matchingTask?.title || 'existing task'}"`,
+					already_child: `Already a subtask: "${overlap.matchingTask?.title || 'existing child'}"`,
+					covered_by_parent: `Already covered by parent task`,
+					parallel_work: `Sibling task already covers this: "${overlap.matchingTask?.title || 'sibling'}"`,
+					subset: `Covered by "${overlap.matchingTask?.title || 'existing task'}"`,
 					none: ''
 				};
 
 				filteredDuplicates.push({
-					proposed: title,
-					existing: overlap.matchingTask.title,
-					reason: reasonMap[overlap.overlapType]
+					proposed: proposed.title,
+					existing: overlap.matchingTask?.title || 'existing task',
+					reason: overlap.reason || reasonMap[overlap.overlapType] || 'Overlaps with existing work'
 				});
 
-				// Skip duplicates and subsets entirely
-				if (overlap.overlapType === 'duplicate' || overlap.overlapType === 'subset') {
+				// Skip duplicates, already_child, and covered_by_parent entirely
+				if (['duplicate', 'already_child', 'covered_by_parent', 'subset'].includes(overlap.overlapType)) {
 					continue;
 				}
 
-				// For superset/partial, still create but note the overlap
+				// For parallel_work, still create but note the overlap
 				actions.push({
 					type: 'create_subtask',
-					description: `Create subtask: ${title} (Note: overlaps with "${overlap.matchingTask.title}")`,
+					description: `Create subtask: ${proposed.title} (Note: ${overlap.reason || 'may overlap with parallel work'})`,
 					data: {
-						title,
-						description: description || undefined,
+						title: proposed.title,
+						description: proposed.description,
 						type: 'task' as IssueType
 					}
 				});
@@ -872,29 +961,30 @@ Use these entity names consistently:
 				// No overlap - add normally
 				actions.push({
 					type: 'create_subtask',
-					description: `Create subtask: ${title}`,
+					description: `Create subtask: ${proposed.title}`,
 					data: {
-						title,
-						description: description || undefined,
+						title: proposed.title,
+						description: proposed.description,
 						type: 'task' as IssueType
 					}
 				});
 			}
 		}
 
-		// Also filter any actions that came from AI's JSON that overlap
+		// Filter AI-generated actions based on semantic overlap
 		actions = actions.filter(action => {
 			if (action.type !== 'create_subtask' || !action.data?.title) return true;
 
-			const overlap = detectOverlap(action.data.title, existingTasks);
-			if (overlap.hasOverlap && overlap.matchingTask &&
-				(overlap.overlapType === 'duplicate' || overlap.overlapType === 'subset')) {
+			// Skip if this is one we just added from text extraction
+			if (proposedFromText.some(p => p.title === action.data?.title)) return true;
+
+			const overlap = overlapResults.get(action.data.title);
+			if (overlap?.hasOverlap &&
+				['duplicate', 'already_child', 'covered_by_parent', 'subset'].includes(overlap.overlapType)) {
 				filteredDuplicates.push({
 					proposed: action.data.title,
-					existing: overlap.matchingTask.title,
-					reason: overlap.overlapType === 'duplicate'
-						? `Already exists as "${overlap.matchingTask.title}"`
-						: `Covered by "${overlap.matchingTask.title}"`
+					existing: overlap.matchingTask?.title || 'existing task',
+					reason: overlap.reason || `${overlap.overlapType} overlap detected`
 				});
 				return false;
 			}
