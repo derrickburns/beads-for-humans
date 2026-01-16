@@ -1605,6 +1605,214 @@ Key required facts:
 - Person.name, Person.birthDate, Person.retirementAge
 - SocialSecurity.estimatedMonthlyAtFRA, SocialSecurity.plannedStartAge
 
+#### Estate Planning
+Entities: Person, Will, Trust, PowerOfAttorney, HealthcareDirective, EstateAsset, BeneficiaryDesignation, ProfessionalContact
+
+Key required facts:
+- Person.name, Person.birthDate
+- Will.hasWill, Trust.hasTrust, PowerOfAttorney.hasPOA
+
+#### Insurance Review
+Entities: InsuredPerson, AutoInsurance, Vehicle, HomeInsurance, LifeInsurance, HealthInsurance, DisabilityInsurance, UmbrellaInsurance, LongTermCare, InsuranceAgent
+
+Key required facts:
+- InsuredPerson.name, InsuredPerson.birthDate
+- At least one insurance policy documented
+
+#### Tax Planning
+Entities: TaxFiler, Dependent, W2Income, BusinessIncome, InvestmentIncome, RentalIncome, Deduction, TaxCredit, EstimatedTax, TaxSummary, TaxProfessional
+
+Key required facts:
+- TaxFiler.name, TaxFiler.filingStatus, TaxFiler.birthDate, TaxFiler.state
+- TaxSummary.taxYear
+
+---
+
+## Schema API Endpoints
+
+The schema API enables backend-centric architecture where domain knowledge lives on the server.
+
+### GET /api/schemas
+
+List all available schemas with metadata.
+
+#### Query Parameters
+- `available_only` (boolean): If 'true', only return domains with implemented schemas
+
+#### Response
+```typescript
+{
+  schemas: Array<{
+    domain: DomainType;
+    name: string;
+    description: string;
+    icon: string;
+    hasSchema: boolean;
+    version: string | null;
+    entityCount: number;
+    requiredFactCount: number;
+    entities: Array<{
+      name: string;
+      displayName: string;
+      attributeCount: number;
+    }>;
+  }>;
+  totalDomains: number;
+  implementedCount: number;
+  timestamp: string;
+}
+```
+
+### GET /api/schemas/[domain]
+
+Get complete schema for a specific domain.
+
+#### Path Parameters
+- `domain`: Domain type (e.g., 'retirement_planning', 'tax_planning')
+
+#### Query Parameters
+- `format`: Response format
+  - `full` (default): Complete schema with all details
+  - `entities_only`: Just entity definitions
+  - `required_only`: Required facts and required attributes
+  - `export_templates`: Just export template definitions
+
+#### Response (full format)
+```typescript
+{
+  domain: DomainType;
+  metadata: { name: string; description: string; icon: string };
+  schema: DomainSchema;
+  timestamp: string;
+}
+```
+
+### POST /api/schemas
+
+Schema operations: validate, extend, check upgrades, get migrations.
+
+#### Request
+```typescript
+{
+  action: 'validate' | 'extend' | 'check_upgrade' | 'get_migrations';
+  domain: DomainType;
+  facts?: Array<{ entity: string; attribute: string; value: unknown }>;  // For validate
+  extensions?: {                                                          // For extend
+    additionalEntities?: EntityDefinition[];
+    additionalAttributes?: Array<{ entityName: string; attributes: AttributeDefinition[] }>;
+    additionalRequiredFacts?: string[];
+  };
+  fromVersion?: string;     // For check_upgrade, get_migrations
+  toVersion?: string;       // For get_migrations
+  versionHistory?: SchemaVersion[];  // For get_migrations
+}
+```
+
+#### Response (validate)
+```typescript
+{
+  action: 'validate';
+  domain: DomainType;
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+```
+
+#### Response (extend)
+```typescript
+{
+  action: 'extend';
+  domain: DomainType;
+  schema: DomainSchema;  // Extended schema
+}
+```
+
+### POST /api/schema-suggestions
+
+AI analyzes facts that don't fit current schema and suggests extensions.
+
+#### Request
+```typescript
+{
+  observedFacts: Array<{
+    entity: string;
+    attribute: string;
+    value: unknown;
+    context?: string;
+  }>;
+  domain: DomainType;
+  currentSchema?: DomainSchema;
+  model?: string;
+  apiKey?: string;
+}
+```
+
+#### Response
+```typescript
+{
+  domain: DomainType;
+  currentSchemaVersion: string;
+  observedFactCount: number;
+  suggestions: Array<{
+    type: 'add_entity' | 'add_attribute' | 'modify_attribute' | 'add_relationship';
+    confidence: number;
+    reason: string;
+    entity?: EntityDefinition;
+    targetEntity?: string;
+    attribute?: AttributeDefinition;
+    relationship?: {
+      from: string;
+      to: string;
+      type: 'one-to-one' | 'one-to-many' | 'many-to-many';
+      description: string;
+    };
+  }>;
+  summary: string;
+  impact: 'Low' | 'Medium' | 'High';
+  timestamp: string;
+}
+```
+
+### POST /api/schema-apply
+
+Apply schema extensions and migrate existing facts.
+
+#### Request
+```typescript
+{
+  domain: DomainType;
+  currentSchema?: DomainSchema;
+  extensions: {
+    additionalEntities?: EntityDefinition[];
+    additionalAttributes?: Array<{ entityName: string; attributes: AttributeDefinition[] }>;
+    additionalRequiredFacts?: string[];
+  };
+  factsToMigrate?: Array<{ entity: string; attribute: string; value: unknown }>;
+  newVersion?: string;
+}
+```
+
+#### Response
+```typescript
+{
+  success: boolean;
+  domain: DomainType;
+  previousVersion: string;
+  newVersion: string;
+  schema: DomainSchema;  // Extended schema
+  migration: SchemaMigration;
+  migratedFacts?: {
+    total: number;
+    modified: number;
+    facts: Array<{ entity: string; attribute: string; value: unknown; migrated: boolean }>;
+  };
+  timestamp: string;
+}
+```
+
+---
+
 #### Example: Retirement Account Entity
 ```typescript
 {

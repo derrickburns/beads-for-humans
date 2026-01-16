@@ -5,6 +5,7 @@ import type { DomainSchema, DomainType, EntityDefinition, AttributeDefinition } 
 import { retirementPlanningSchema } from './retirement';
 import { estatePlanningSchema } from './estate';
 import { insuranceReviewSchema } from './insurance';
+import { taxPlanningSchema } from './tax';
 
 // ============================================
 // SCHEMA VERSIONING & MIGRATION
@@ -68,7 +69,7 @@ export const builtInSchemas: Record<DomainType, DomainSchema | null> = {
 	estate_planning: estatePlanningSchema,
 	home_renovation: null,      // TODO: Implement
 	insurance_review: insuranceReviewSchema,
-	tax_planning: null,         // TODO: Implement
+	tax_planning: taxPlanningSchema,
 	debt_management: null,      // TODO: Implement
 	investment_portfolio: null, // TODO: Implement
 	business_planning: null,    // TODO: Implement
@@ -374,3 +375,4 @@ export function extendSchema(
 export { retirementPlanningSchema };
 export { estatePlanningSchema };
 export { insuranceReviewSchema };
+export { taxPlanningSchema };

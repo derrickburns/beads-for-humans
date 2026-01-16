@@ -404,9 +404,9 @@ Verification: https://www.ssa.gov/myaccount/
 Different planning domains have different data requirements. Beads includes pre-built schemas for common domains:
 
 - **Retirement Planning**: Social Security, retirement accounts, pensions, expenses
-- **Estate Planning**: Wills, trusts, beneficiaries, assets
-- **Insurance Review**: Policies, coverage, premiums, agents
-- **Home Renovation**: Contractors, costs, timelines, materials
+- **Estate Planning**: Wills, trusts, beneficiaries, assets, powers of attorney
+- **Insurance Review**: Auto, home, life, health, disability, umbrella, and long-term care policies
+- **Tax Planning**: W-2 income, self-employment, investments, deductions, credits, estimated payments
 
 Schemas define:
 - What entities exist (e.g., "RetirementAccount")
@@ -452,6 +452,18 @@ Facts can be exported for external use:
 - **JSON**: Structured data for integration
 - **CSV**: Spreadsheet-friendly tabular format
 - **PDF**: Formatted reports for advisors or family
+
+### Schema Evolution
+
+Schemas evolve over time as AI capabilities improve and domain knowledge deepens. Beads supports this evolution without breaking existing data:
+
+1. **Version Tracking**: Each schema has a semantic version (e.g., 1.0.0, 1.1.0)
+2. **Migration Path**: When upgrading, the system identifies what changed between versions
+3. **Automatic Migration**: Existing facts are automatically transformed to match new schemas
+4. **Backward Compatibility**: Unknown attributes from older versions generate warnings, not errors
+5. **AI-Suggested Extensions**: When AI encounters facts that don't fit the current schema, it can propose extensions
+
+This allows the backend to evolve continuously. New entities, attributes, and validation rules can be added without frontend changes or data loss.
 
 ## Why This Approach Works
 
