@@ -4,6 +4,7 @@
 import type { DomainSchema, DomainType, EntityDefinition, AttributeDefinition } from '$lib/types/facts';
 import { retirementPlanningSchema } from './retirement';
 import { estatePlanningSchema } from './estate';
+import { insuranceReviewSchema } from './insurance';
 
 // ============================================
 // SCHEMA VERSIONING & MIGRATION
@@ -66,7 +67,7 @@ export const builtInSchemas: Record<DomainType, DomainSchema | null> = {
 	retirement_planning: retirementPlanningSchema,
 	estate_planning: estatePlanningSchema,
 	home_renovation: null,      // TODO: Implement
-	insurance_review: null,     // TODO: Implement
+	insurance_review: insuranceReviewSchema,
 	tax_planning: null,         // TODO: Implement
 	debt_management: null,      // TODO: Implement
 	investment_portfolio: null, // TODO: Implement
@@ -372,3 +373,4 @@ export function extendSchema(
 // Re-export individual schemas for direct import
 export { retirementPlanningSchema };
 export { estatePlanningSchema };
+export { insuranceReviewSchema };
