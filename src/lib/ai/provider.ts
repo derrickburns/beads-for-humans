@@ -101,3 +101,118 @@ export async function chatCompletion(
 export function isAIConfigured(): boolean {
 	return !!env.OPENROUTER_API_KEY;
 }
+
+export interface StreamingOptions extends ChatCompletionOptions {
+	onToken?: (token: string) => void;
+	onThinking?: (thinking: string) => void;
+}
+
+export async function* chatCompletionStream(
+	options: StreamingOptions
+): AsyncGenerator<{ type: 'thinking' | 'content' | 'done' | 'error'; data: string }> {
+	const apiKey = options.apiKey || env.OPENROUTER_API_KEY;
+
+	if (!apiKey) {
+		yield { type: 'error', data: 'AI not configured. Add your OpenRouter API key in Settings.' };
+		return;
+	}
+
+	const model = options.model || DEFAULT_MODEL;
+	const maxTokens = options.maxTokens || 1024;
+
+	const supportsExtendedThinking = model.includes('claude') &&
+		(model.includes('sonnet') || model.includes('opus'));
+
+	const requestBody: Record<string, unknown> = {
+		model,
+		max_tokens: maxTokens,
+		stream: true,
+		messages: options.messages.map((m) => ({
+			role: m.role,
+			content: m.content
+		}))
+	};
+
+	if (options.extendedThinking && supportsExtendedThinking) {
+		requestBody.thinking = {
+			type: 'enabled',
+			budget_tokens: options.thinkingBudget || 10000
+		};
+		requestBody.max_tokens = Math.max(maxTokens, 16000);
+	}
+
+	try {
+		const response = await fetch(OPENROUTER_API_URL, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'Authorization': `Bearer ${apiKey}`,
+				'HTTP-Referer': env.SITE_URL || 'http://localhost:5173',
+				'X-Title': 'Middle Manager'
+			},
+			body: JSON.stringify(requestBody)
+		});
+
+		if (!response.ok) {
+			const errorText = await response.text();
+			if (response.status === 401) {
+				yield { type: 'error', data: 'Invalid API key. Please check your OpenRouter API key.' };
+			} else if (response.status === 429) {
+				yield { type: 'error', data: 'Rate limit exceeded. Please try again in a moment.' };
+			} else {
+				yield { type: 'error', data: errorText };
+			}
+			return;
+		}
+
+		const reader = response.body?.getReader();
+		if (!reader) {
+			yield { type: 'error', data: 'No response body' };
+			return;
+		}
+
+		const decoder = new TextDecoder();
+		let buffer = '';
+		let fullContent = '';
+
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+
+			buffer += decoder.decode(value, { stream: true });
+			const lines = buffer.split('\n');
+			buffer = lines.pop() || '';
+
+			for (const line of lines) {
+				if (line.startsWith('data: ')) {
+					const data = line.slice(6);
+					if (data === '[DONE]') {
+						yield { type: 'done', data: fullContent };
+						return;
+					}
+
+					try {
+						const parsed = JSON.parse(data);
+						const delta = parsed.choices?.[0]?.delta;
+
+						if (delta?.content) {
+							fullContent += delta.content;
+							yield { type: 'content', data: delta.content };
+						}
+
+						// Handle thinking blocks if present (Claude extended thinking)
+						if (delta?.thinking) {
+							yield { type: 'thinking', data: delta.thinking };
+						}
+					} catch {
+						// Ignore parse errors for incomplete JSON
+					}
+				}
+			}
+		}
+
+		yield { type: 'done', data: fullContent };
+	} catch (error) {
+		yield { type: 'error', data: String(error) };
+	}
+}

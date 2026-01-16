@@ -49,6 +49,12 @@
 	let projectPlan = $state<ProjectPlan | null>(null);
 	let creatingIssues = $state(false);
 
+	// Streaming progress state
+	let progressPhase = $state<string>('');
+	let progressMessage = $state<string>('');
+	let thinkingPreview = $state<string>('');
+	let contentLength = $state<number>(0);
+
 	// Group tasks by category
 	let tasksByCategory = $derived.by(() => {
 		if (!projectPlan) return new Map<string, DecomposedTask[]>();
@@ -70,9 +76,13 @@
 
 		projectLoading = true;
 		projectError = null;
+		progressPhase = 'starting';
+		progressMessage = 'Connecting...';
+		thinkingPreview = '';
+		contentLength = 0;
 
 		try {
-			const response = await fetch('/api/decompose-project', {
+			const response = await fetch('/api/decompose-project-stream', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
@@ -81,16 +91,81 @@
 				})
 			});
 
-			const data = await response.json();
+			if (!response.ok) {
+				const data = await response.json();
+				projectError = data.error || 'Failed to start planning';
+				projectLoading = false;
+				return;
+			}
 
-			if (data.error) {
-				projectError = data.error;
-			} else if (data.plan) {
-				// Add 'selected' property to all tasks (default true)
-				projectPlan = {
-					...data.plan,
-					tasks: data.plan.tasks.map((t: DecomposedTask) => ({ ...t, selected: true }))
-				};
+			const reader = response.body?.getReader();
+			if (!reader) {
+				projectError = 'No response stream available';
+				projectLoading = false;
+				return;
+			}
+
+			const decoder = new TextDecoder();
+			let buffer = '';
+
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+
+				buffer += decoder.decode(value, { stream: true });
+				const lines = buffer.split('\n\n');
+				buffer = lines.pop() || '';
+
+				for (const block of lines) {
+					if (!block.trim()) continue;
+
+					const eventMatch = block.match(/^event: (\w+)\ndata: (.+)$/s);
+					if (!eventMatch) continue;
+
+					const [, eventType, dataStr] = eventMatch;
+
+					try {
+						const data = JSON.parse(dataStr);
+
+						switch (eventType) {
+							case 'progress':
+								progressPhase = data.phase;
+								progressMessage = data.message;
+								if (data.thinkingPreview) {
+									thinkingPreview = data.thinkingPreview;
+								}
+								break;
+
+							case 'content':
+								contentLength = data.accumulated;
+								progressPhase = 'generating';
+								progressMessage = 'Generating plan...';
+								break;
+
+							case 'complete':
+								if (data.plan) {
+									projectPlan = {
+										...data.plan,
+										tasks: data.plan.tasks.map((t: DecomposedTask) => ({ ...t, selected: true }))
+									};
+								}
+								projectLoading = false;
+								return;
+
+							case 'error':
+								projectError = data.message;
+								projectLoading = false;
+								return;
+						}
+					} catch {
+						// Ignore parse errors
+					}
+				}
+			}
+
+			// Stream ended without complete event
+			if (!projectPlan) {
+				projectError = 'Stream ended unexpectedly';
 			}
 		} catch (e) {
 			projectError = 'Failed to analyze project. Please try again.';
@@ -495,21 +570,71 @@
 						</div>
 					{/if}
 
-					<button
-						onclick={decomposeProject}
-						disabled={!projectGoal.trim() || projectLoading}
-						class="w-full py-4 bg-blue-600 text-white text-lg font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-3"
-					>
-						{#if projectLoading}
-							<span class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-							Analyzing your project...
-						{:else}
+					{#if projectLoading}
+						<!-- Progress Display -->
+						<div class="w-full p-6 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl">
+							<div class="flex items-center gap-4 mb-4">
+								<div class="relative">
+									<div class="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+									<div class="absolute inset-0 flex items-center justify-center">
+										<svg class="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+										</svg>
+									</div>
+								</div>
+								<div class="flex-1">
+									<p class="text-lg font-semibold text-blue-900">{progressMessage}</p>
+									<p class="text-sm text-blue-600">
+										{#if progressPhase === 'thinking'}
+											AI is reasoning through your project...
+										{:else if progressPhase === 'generating'}
+											Building your task list ({contentLength.toLocaleString()} chars)
+										{:else if progressPhase === 'parsing'}
+											Organizing tasks and dependencies...
+										{:else}
+											Initializing AI planner...
+										{/if}
+									</p>
+								</div>
+							</div>
+
+							<!-- Progress Steps -->
+							<div class="flex items-center gap-2 mb-4">
+								{#each ['starting', 'thinking', 'generating', 'parsing'] as step, i}
+									{@const isActive = step === progressPhase}
+									{@const isPast = ['starting', 'thinking', 'generating', 'parsing'].indexOf(progressPhase) > i}
+									<div class="flex-1">
+										<div class="h-2 rounded-full {isPast ? 'bg-blue-600' : isActive ? 'bg-blue-400 animate-pulse' : 'bg-blue-200'}"></div>
+									</div>
+								{/each}
+							</div>
+
+							{#if thinkingPreview}
+								<div class="mt-4 p-3 bg-white/60 rounded-lg border border-blue-100">
+									<p class="text-xs font-medium text-blue-700 mb-1">AI is considering:</p>
+									<p class="text-sm text-gray-600 italic line-clamp-2">{thinkingPreview}...</p>
+								</div>
+							{/if}
+
+							<button
+								onclick={() => { projectLoading = false; projectError = 'Cancelled by user'; }}
+								class="mt-4 text-sm text-blue-600 hover:text-blue-800 underline"
+							>
+								Cancel
+							</button>
+						</div>
+					{:else}
+						<button
+							onclick={decomposeProject}
+							disabled={!projectGoal.trim()}
+							class="w-full py-4 bg-blue-600 text-white text-lg font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-3"
+						>
 							<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
 							</svg>
 							Create My Plan
-						{/if}
-					</button>
+						</button>
+					{/if}
 				</div>
 			</div>
 
