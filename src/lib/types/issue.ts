@@ -82,6 +82,131 @@ export interface AIAgenda {
 	nextHumanQuestion?: string;  // The most important thing to ask human
 }
 
+// === Uncertainty Modeling ===
+// For outcomes that cannot be known with certainty
+
+export type UncertaintyType =
+	| 'market_returns'      // Investment performance
+	| 'inflation'           // Cost of living changes
+	| 'longevity'           // How long someone lives
+	| 'healthcare_costs'    // Medical expenses
+	| 'income'              // Employment/earnings
+	| 'interest_rates'      // Borrowing/savings rates
+	| 'property_values'     // Real estate
+	| 'exchange_rates'      // Currency
+	| 'project_duration'    // How long work takes
+	| 'project_cost'        // How much work costs
+	| 'custom';             // User-defined
+
+export type ModelingApproach =
+	| 'monte_carlo'         // Random sampling from distributions
+	| 'scenario_analysis'   // Discrete named scenarios
+	| 'sensitivity'         // Vary one parameter at a time
+	| 'historical_sim'      // Use actual historical sequences
+	| 'stress_test'         // Extreme but plausible scenarios
+	| 'robust_optimization' // Optimize for worst case
+	| 'bayesian'            // Update beliefs with evidence
+	| 'real_options';       // Value flexibility/optionality
+
+export type DistributionType =
+	| 'normal'              // Gaussian - symmetric, thin tails
+	| 'log_normal'          // Prices, wealth (always positive)
+	| 'student_t'           // Fat tails (market returns)
+	| 'pareto'              // Power law (extreme events)
+	| 'uniform'             // Equal probability in range
+	| 'triangular'          // Min/mode/max estimate
+	| 'empirical'           // From historical data
+	| 'mixture';            // Regime switching (bull/bear)
+
+export interface UncertainParameter {
+	id: string;
+	name: string;                         // e.g., "Annual stock return"
+	uncertaintyType: UncertaintyType;
+	description?: string;
+
+	// Distribution specification
+	distribution: DistributionType;
+	parameters: {
+		mean?: number;
+		stdDev?: number;
+		min?: number;
+		max?: number;
+		mode?: number;                      // For triangular
+		degreesOfFreedom?: number;          // For Student's t
+		alpha?: number;                     // For Pareto
+		historicalData?: number[];          // For empirical
+		regimes?: Array<{                   // For mixture
+			name: string;
+			probability: number;
+			distribution: DistributionType;
+			parameters: Record<string, number>;
+		}>;
+	};
+
+	// For sensitivity analysis
+	baseCase?: number;
+	lowCase?: number;
+	highCase?: number;
+
+	// Source of estimates
+	source: 'historical' | 'expert' | 'user' | 'ai_suggested';
+	confidence?: number;                  // How confident in these parameters
+	rationale?: string;                   // Why these values
+}
+
+export interface Scenario {
+	id: string;
+	name: string;                         // e.g., "Bull market", "Stagflation"
+	description: string;
+	probability?: number;                 // Estimated likelihood (0-1)
+	parameterOverrides: Record<string, number>; // Override uncertain params
+	outcome?: number;                     // Computed result
+}
+
+export interface SimulationConfig {
+	approach: ModelingApproach;
+	iterations?: number;                  // For Monte Carlo (e.g., 10000)
+	timeHorizon?: number;                 // Years to simulate
+	confidenceLevel?: number;             // e.g., 0.95 for 95% CI
+
+	// For scenario analysis
+	scenarios?: Scenario[];
+
+	// For sensitivity analysis
+	parameterToVary?: string;             // Which parameter to sweep
+	sweepRange?: { min: number; max: number; steps: number };
+}
+
+export interface SimulationResult {
+	id: string;
+	config: SimulationConfig;
+	runAt: string;
+
+	// Monte Carlo results
+	outcomes?: number[];                  // All sampled outcomes
+	percentiles?: Record<number, number>; // e.g., {5: 50000, 50: 120000, 95: 300000}
+	mean?: number;
+	stdDev?: number;
+	probabilityOfRuin?: number;           // P(outcome < threshold)
+
+	// Scenario results
+	scenarioOutcomes?: Record<string, number>;
+
+	// Sensitivity results
+	sensitivityCurve?: Array<{ paramValue: number; outcome: number }>;
+
+	// Interpretation
+	summary: string;                      // AI-generated plain English summary
+	recommendations?: string[];           // What to do based on results
+}
+
+export interface UncertaintyAnalysis {
+	uncertainParameters: UncertainParameter[];
+	simulations: SimulationResult[];
+	suggestedApproach?: ModelingApproach;
+	approachRationale?: string;
+}
+
 // Human attention tracking
 export interface NeedsHumanReason {
 	trigger: NeedsHumanTrigger;
@@ -266,6 +391,9 @@ export interface Issue {
 	// === Budget tracking ===
 	budgetEstimate?: BudgetEstimate;         // AI-estimated cost range
 	actualCost?: ActualCost;                 // User-recorded actual cost
+
+	// === Uncertainty modeling ===
+	uncertaintyAnalysis?: UncertaintyAnalysis; // For outcomes that cannot be known
 }
 
 export interface RelationshipSuggestion {

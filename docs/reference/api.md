@@ -1022,3 +1022,322 @@ An issue is actionable when:
 ```typescript
 isActionable(issueId: string): boolean
 ```
+
+---
+
+## Uncertainty Modeling
+
+For outcomes that cannot be known with certainty, Beads provides a complete uncertainty modeling system.
+
+### UncertaintyType
+
+Type of uncertain outcome.
+
+```typescript
+type UncertaintyType =
+  | 'market_returns'    // Investment performance
+  | 'inflation'         // Cost of living changes
+  | 'longevity'         // How long someone lives
+  | 'healthcare_costs'  // Medical expenses
+  | 'income'            // Employment/earnings
+  | 'interest_rates'    // Borrowing/savings rates
+  | 'property_values'   // Real estate
+  | 'exchange_rates'    // Currency
+  | 'project_duration'  // How long work takes
+  | 'project_cost'      // How much work costs
+  | 'custom';           // User-defined
+```
+
+### ModelingApproach
+
+How to model the uncertainty.
+
+```typescript
+type ModelingApproach =
+  | 'monte_carlo'         // Random sampling from distributions
+  | 'scenario_analysis'   // Discrete named scenarios
+  | 'sensitivity'         // Vary one parameter at a time
+  | 'historical_sim'      // Use actual historical sequences
+  | 'stress_test'         // Extreme but plausible scenarios
+  | 'robust_optimization' // Optimize for worst case
+  | 'bayesian'            // Update beliefs with evidence
+  | 'real_options';       // Value flexibility/optionality
+```
+
+| Approach | When to Use | Example |
+|----------|-------------|---------|
+| Monte Carlo | Many uncertain parameters | Retirement planning |
+| Scenario Analysis | Discrete named futures | "Bull market" vs "Recession" |
+| Sensitivity | Identify key drivers | "What if returns are 4% vs 8%?" |
+| Historical Sim | Past data available | Using actual market sequences |
+| Stress Test | Extreme events | "What if market drops 40%?" |
+| Bayesian | Updating with new data | Annual retirement review |
+
+### DistributionType
+
+Statistical distribution for uncertain parameters.
+
+```typescript
+type DistributionType =
+  | 'normal'       // Symmetric, thin tails
+  | 'log_normal'   // Always positive, right-skewed (prices, wealth)
+  | 'student_t'    // Fat tails (market returns with crashes)
+  | 'pareto'       // Power law (extreme events)
+  | 'uniform'      // Equal probability in range
+  | 'triangular'   // Min/mode/max estimate
+  | 'empirical'    // From historical data
+  | 'mixture';     // Regime switching (bull/bear markets)
+```
+
+### UncertainParameter
+
+Definition of an uncertain input.
+
+```typescript
+interface UncertainParameter {
+  id: string;
+  name: string;                         // e.g., "Annual stock return"
+  uncertaintyType: UncertaintyType;
+  description?: string;
+
+  // Distribution specification
+  distribution: DistributionType;
+  parameters: {
+    mean?: number;
+    stdDev?: number;
+    min?: number;
+    max?: number;
+    mode?: number;                      // For triangular
+    degreesOfFreedom?: number;          // For Student's t
+    alpha?: number;                     // For Pareto
+    historicalData?: number[];          // For empirical
+    regimes?: Array<{                   // For mixture
+      name: string;
+      probability: number;
+      distribution: DistributionType;
+      parameters: Record<string, number>;
+    }>;
+  };
+
+  // For sensitivity analysis
+  baseCase?: number;
+  lowCase?: number;
+  highCase?: number;
+
+  // Source of estimates
+  source: 'historical' | 'expert' | 'user' | 'ai_suggested';
+  confidence?: number;                  // How confident in parameters
+  rationale?: string;                   // Why these values
+}
+```
+
+### Scenario
+
+Named future state with parameter overrides.
+
+```typescript
+interface Scenario {
+  id: string;
+  name: string;                         // e.g., "Bull Market"
+  description: string;
+  probability?: number;                 // Estimated likelihood (0-1)
+  parameterOverrides: Record<string, number>;
+  outcome?: number;                     // Computed result
+}
+```
+
+### SimulationConfig
+
+Configuration for running a simulation.
+
+```typescript
+interface SimulationConfig {
+  approach: ModelingApproach;
+  iterations?: number;                  // For Monte Carlo (e.g., 10000)
+  timeHorizon?: number;                 // Years to simulate
+  confidenceLevel?: number;             // e.g., 0.95 for 95% CI
+
+  // For scenario analysis
+  scenarios?: Scenario[];
+
+  // For sensitivity analysis
+  parameterToVary?: string;
+  sweepRange?: { min: number; max: number; steps: number };
+}
+```
+
+### SimulationResult
+
+Results from running a simulation.
+
+```typescript
+interface SimulationResult {
+  id: string;
+  config: SimulationConfig;
+  runAt: string;
+
+  // Monte Carlo results
+  outcomes?: number[];                  // All sampled outcomes
+  percentiles?: Record<number, number>; // e.g., {5: 50000, 50: 120000, 95: 300000}
+  mean?: number;
+  stdDev?: number;
+  probabilityOfRuin?: number;           // P(outcome < threshold)
+
+  // Scenario results
+  scenarioOutcomes?: Record<string, number>;
+
+  // Sensitivity results
+  sensitivityCurve?: Array<{ paramValue: number; outcome: number }>;
+
+  // Interpretation
+  summary: string;                      // Plain English summary
+  recommendations?: string[];           // Actionable suggestions
+}
+```
+
+### UncertaintyAnalysis
+
+Container for all uncertainty data on an issue.
+
+```typescript
+interface UncertaintyAnalysis {
+  uncertainParameters: UncertainParameter[];
+  simulations: SimulationResult[];
+  suggestedApproach?: ModelingApproach;
+  approachRationale?: string;
+}
+```
+
+---
+
+## Uncertainty API Endpoints
+
+### POST /api/suggest-uncertainty
+
+AI suggests uncertainty modeling approach for a task.
+
+#### Request
+```typescript
+{
+  issue: Issue;
+  projectContext?: string;
+  model?: string;
+  apiKey?: string;
+}
+```
+
+#### Response
+```typescript
+{
+  hasUncertainty: boolean;
+  explanation: string;                  // Why this does/doesn't need uncertainty modeling
+  suggestion?: {
+    approach: ModelingApproach;
+    rationale: string;
+    parameters: UncertainParameter[];
+    scenarios?: Scenario[];
+    simulationConfig: SimulationConfig;
+    explanation: string;
+  };
+  suggestedAt: string;
+}
+```
+
+### POST /api/run-simulation
+
+Run an uncertainty simulation.
+
+#### Request
+```typescript
+{
+  config: SimulationConfig;
+  parameters: UncertainParameter[];
+  context: {
+    goalDescription: string;
+    timeHorizon?: number;
+    initialValue?: number;              // Starting portfolio value
+    targetValue?: number;               // Goal amount
+    withdrawalRate?: number;            // Annual withdrawal rate
+    inflationAdjusted?: boolean;
+  };
+  model?: string;
+  apiKey?: string;
+}
+```
+
+#### Response
+```typescript
+{
+  result: SimulationResult;
+  executionTimeMs: number;
+}
+```
+
+### Domain-Specific Defaults
+
+The AI suggests these default parameters based on domain knowledge:
+
+#### Investment Returns (Real, After Inflation)
+| Asset Class | Mean | StdDev | Distribution |
+|-------------|------|--------|--------------|
+| US Stocks | 7% | 18% | Student's t (df=5) |
+| US Bonds | 2% | 6% | Normal |
+| International Stocks | 6% | 22% | Student's t (df=5) |
+| Real Estate | 4% | 12% | Log-normal |
+
+#### Other Parameters
+| Parameter | Mean | StdDev | Distribution |
+|-----------|------|--------|--------------|
+| Inflation | 3% | 1.5% | Log-normal |
+| Project Duration | 1.5x-3x estimate | varies | Log-normal |
+| Longevity at 65 | 22 years | - | Triangular(15, 22, 35) |
+
+### Example: Retirement Planning
+
+```typescript
+// 1. Suggest uncertainty modeling
+const suggestion = await fetch('/api/suggest-uncertainty', {
+  method: 'POST',
+  body: JSON.stringify({
+    issue: {
+      title: "Retirement by age 60",
+      description: "Save enough to retire comfortably",
+      type: "goal"
+    }
+  })
+});
+
+// 2. Run Monte Carlo simulation
+const simulation = await fetch('/api/run-simulation', {
+  method: 'POST',
+  body: JSON.stringify({
+    config: {
+      approach: 'monte_carlo',
+      iterations: 10000,
+      timeHorizon: 30,
+      confidenceLevel: 0.95
+    },
+    parameters: [
+      {
+        id: 'stock-returns',
+        name: 'Annual stock return',
+        uncertaintyType: 'market_returns',
+        distribution: 'student_t',
+        parameters: { mean: 0.07, stdDev: 0.18, degreesOfFreedom: 5 },
+        source: 'ai_suggested'
+      }
+    ],
+    context: {
+      goalDescription: "Retirement by age 60",
+      timeHorizon: 30,
+      initialValue: 500000,
+      withdrawalRate: 0.04
+    }
+  })
+});
+
+// Result includes:
+// - percentiles: { 5: 180000, 50: 1200000, 95: 3500000 }
+// - probabilityOfRuin: 0.08
+// - recommendations: ["Consider reducing withdrawal rate to 3.5%", ...]
+```

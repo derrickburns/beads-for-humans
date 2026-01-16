@@ -63,7 +63,7 @@ interface RichContext {
 }
 
 interface SuggestedAction {
-	type: 'update_task' | 'create_subtask' | 'mark_complete' | 'add_dependency' | 'add_concern' | 'ask_question' | 'update_scope' | 'add_constraint';
+	type: 'update_task' | 'create_subtask' | 'mark_complete' | 'add_dependency' | 'add_concern' | 'ask_question' | 'update_scope' | 'add_constraint' | 'add_uncertainty_parameter' | 'suggest_simulation';
 	description: string;
 	data?: {
 		title?: string;
@@ -75,6 +75,17 @@ interface SuggestedAction {
 		question?: string;
 		constraintType?: string;
 		scopeUpdate?: Partial<ScopeBoundary>;
+		// Uncertainty modeling
+		name?: string;
+		uncertaintyType?: string;
+		distribution?: string;
+		parameters?: Record<string, unknown>;
+		source?: string;
+		rationale?: string;
+		approach?: string;
+		iterations?: number;
+		timeHorizon?: number;
+		confidenceLevel?: number;
 	};
 }
 
@@ -332,7 +343,100 @@ After each response, output a JSON block with actions AND your agenda (what you 
 - **accessRequests**: Services/accounts you want read/write access to
 - **backgroundTasks**: Work you can do without the human
 
-ALWAYS include an agenda section, even if empty. This is how the system knows what you're waiting for.`;
+ALWAYS include an agenda section, even if empty. This is how the system knows what you're waiting for.
+
+## Uncertainty Modeling
+
+Some outcomes cannot be known with certainty (investment returns, longevity, project costs). When you detect uncertainty:
+
+### 1. Recognize Uncertainty
+Look for outcomes involving:
+- **Market returns** - investment performance, stock prices
+- **Inflation** - future cost of living
+- **Longevity** - how long someone will live
+- **Healthcare costs** - medical expenses over time
+- **Income** - employment, earnings changes
+- **Interest rates** - borrowing/savings rates
+- **Property values** - real estate appreciation
+- **Project duration** - how long work takes
+- **Project cost** - how much work costs
+
+### 2. Suggest Modeling Approach
+Based on the problem, recommend ONE of these:
+
+| Approach | When to Use | Example |
+|----------|-------------|---------|
+| **Monte Carlo** | Many uncertain parameters, need probability distributions | Retirement planning with investment returns |
+| **Scenario Analysis** | Discrete named futures are meaningful | "Bull market", "Stagflation", "Recession" |
+| **Sensitivity** | Want to know which parameter matters most | "What if returns are 4% vs 8%?" |
+| **Historical Sim** | Past data is available and relevant | Using actual market return sequences |
+| **Stress Test** | Need to test extreme but plausible events | "What if market drops 40%?" |
+| **Bayesian** | Will update beliefs as new data arrives | Updating retirement plan annually |
+
+### 3. Guide Parameter Definition
+For each uncertain parameter, gather:
+- **Distribution type**: Normal (typical variation), log-normal (always positive like prices), Student's t (fat tails for markets), triangular (min/mode/max estimate)
+- **Key parameters**: mean, standard deviation, min/max bounds
+- **Source**: historical data, expert opinion, user estimate
+- **Confidence**: how sure are we about these parameters?
+
+### 4. Domain-Specific Defaults
+Suggest reasonable defaults based on domain knowledge:
+
+**Investment returns (real, after inflation):**
+- US stocks: mean 7%, stdDev 18%, use Student's t (df=5) for fat tails
+- US bonds: mean 2%, stdDev 6%, normal distribution
+- International stocks: mean 6%, stdDev 22%, Student's t
+
+**Inflation:** mean 3%, stdDev 1.5%, log-normal (always positive)
+
+**Longevity (remaining years at 65):** Use mortality tables, or triangular(15, 22, 35)
+
+**Project durations:** Often log-normal (tasks take longer, rarely shorter), use 1.5x-3x padding
+
+### 5. Output Uncertainty Suggestions
+When suggesting uncertainty analysis, include in actions:
+
+\`\`\`json
+{
+  "type": "add_uncertainty_parameter",
+  "description": "Add uncertain parameter for annual stock returns",
+  "data": {
+    "name": "Annual stock return",
+    "uncertaintyType": "market_returns",
+    "distribution": "student_t",
+    "parameters": {
+      "mean": 0.07,
+      "stdDev": 0.18,
+      "degreesOfFreedom": 5
+    },
+    "source": "ai_suggested",
+    "rationale": "Historical US stock returns with fat tails for crash risk"
+  }
+}
+\`\`\`
+
+Or suggest a simulation configuration:
+
+\`\`\`json
+{
+  "type": "suggest_simulation",
+  "description": "Run Monte Carlo simulation for retirement portfolio",
+  "data": {
+    "approach": "monte_carlo",
+    "iterations": 10000,
+    "timeHorizon": 30,
+    "confidenceLevel": 0.95
+  }
+}
+\`\`\`
+
+### 6. Explain in Plain English
+When presenting uncertainty analysis:
+- Explain what the numbers mean: "There's a 5% chance you'll run out of money before age 85"
+- Give actionable ranges: "You need between \$1.2M and \$1.8M to retire comfortably"
+- Recommend hedges: "Consider a bond tent in your first 5 years of retirement"
+- Be honest about limitations: "These projections assume historical patterns continue"`;
 
 	const messages = [
 		{ role: 'system' as const, content: systemPrompt },

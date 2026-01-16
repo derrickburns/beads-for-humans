@@ -308,6 +308,74 @@ Work on actionable leaves (those with no blocking dependencies). Mark complete o
 ### 7. Iterate
 As work reveals new information, update the plan. Add concerns, adjust constraints, decompose further.
 
+## Uncertainty Modeling
+
+Some outcomes cannot be known with certainty. Investment returns, project durations, healthcare costs, and longevity are all fundamentally uncertain. Beads provides tools to model and reason about this uncertainty.
+
+### When Uncertainty Matters
+
+Traditional planning assumes we know outcomes. "The project will cost $50,000." "Returns will be 7%." But these are estimates, not facts. Ignoring uncertainty leads to:
+
+- **Overconfidence**: Plans that look precise but aren't
+- **Fragility**: Plans that break when reality differs from expectations
+- **Poor Decisions**: Choices that ignore tail risks
+
+Beads makes uncertainty explicit and computable.
+
+### Modeling Approaches
+
+Different problems call for different approaches:
+
+| Approach | Best For | Example |
+|----------|----------|---------|
+| **Monte Carlo** | Many uncertain parameters, need probability distributions | Retirement planning: "What's my chance of running out of money?" |
+| **Scenario Analysis** | Discrete named futures are meaningful | Business planning: "What happens in a recession vs. growth?" |
+| **Sensitivity Analysis** | Understanding which parameter matters most | Project planning: "Does timeline or cost uncertainty matter more?" |
+| **Stress Testing** | Extreme but plausible events | Risk management: "What if the market drops 40%?" |
+| **Historical Simulation** | Past data is available and relevant | Market analysis: Using actual historical return sequences |
+
+### Distribution Types
+
+Not all uncertainty is the same:
+
+- **Normal (Gaussian)**: Symmetric, thin tails. Good for averages of many factors.
+- **Log-Normal**: Always positive, right-skewed. Good for prices, wealth, and durations (things can't be negative).
+- **Student's t**: Fat tails. Essential for market returns where crashes happen more often than normal distributions predict.
+- **Triangular**: Min/mode/max. Good when you have three-point estimates from experts.
+- **Mixture (Regime-Switching)**: Different states with different distributions. Good for markets that switch between bull and bear.
+
+### AI Suggests Modeling
+
+When you create a goal that involves uncertainty (retirement planning, project cost estimation, financial projections), the AI:
+
+1. **Recognizes the uncertainty** - Identifies which outcomes are inherently unpredictable
+2. **Suggests an approach** - Recommends Monte Carlo, scenarios, or other methods
+3. **Proposes parameters** - Uses domain knowledge to suggest reasonable distributions
+4. **Runs simulations** - Generates thousands of scenarios to compute probabilities
+5. **Explains in plain English** - "There's a 5% chance you'll run out of money before age 85"
+
+### Domain Knowledge
+
+The AI uses research-backed defaults:
+
+- **US Stocks**: 7% mean real return, 18% standard deviation, Student's t distribution (df=5) for fat tails
+- **Inflation**: 3% mean, 1.5% standard deviation, log-normal (always positive)
+- **Project Duration**: Log-normal with 1.5-3x padding (tasks take longer, rarely shorter)
+- **Longevity at 65**: Triangular distribution with 15/22/35 years (min/mode/max)
+
+These can be overridden with user-specific data or expert opinion.
+
+### Key Outputs
+
+After running simulations, you get:
+
+- **Percentiles**: "In the 5th percentile, you have $180K. In the 95th, you have $3.5M."
+- **Probability of Ruin**: "There's an 8% chance of running out of money."
+- **Sensitivity**: "Returns matter more than inflation for your outcome."
+- **Recommendations**: "Consider reducing withdrawal rate to 3.5%."
+
+This transforms vague uncertainty into actionable insight.
+
 ## Why This Approach Works
 
 ### Accuracy Over Precision
