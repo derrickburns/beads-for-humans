@@ -496,6 +496,8 @@ After each response, output a JSON block with actions AND your agenda (what you 
 - **update_scope**: Suggest adding to in-scope or out-of-scope lists
 - **extract_fact**: Extract a verifiable fact for the validation store (see Fact Extraction below)
 
+⚠️ **MANDATORY**: If your response mentions subtasks, next steps, or things to do, you MUST include a create_subtask action for EACH ONE. Do NOT just describe them in text. Do NOT ask "would you like me to create these?" - just CREATE THEM. The graph shows ghost nodes for each action - without actions, subtasks are invisible.
+
 **Agenda items:**
 - **pendingQuestions**: Things you need the human to answer (so system can remind them later)
 - **resourcesNeeded**: Web pages, documents, or data you want to fetch
