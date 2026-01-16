@@ -1,4 +1,5 @@
 import { browser } from '$app/environment';
+import { projectStore } from '$lib/stores/projects.svelte';
 import type {
 	Issue,
 	IssueStatus,
@@ -105,11 +106,50 @@ class IssueStore {
 	loadProject(projectId: string | null): void {
 		this.currentProjectId = projectId;
 		this.issues = loadIssues(projectId);
+		// Update project counts on load
+		this.updateProjectCounts();
 	}
 
 	// Save current issues (called internally after mutations)
 	private save(): void {
 		saveIssues(this.issues, this.currentProjectId);
+		this.updateProjectCounts();
+	}
+
+	// Update the project store with current issue counts
+	private updateProjectCounts(): void {
+		if (!this.currentProjectId) return;
+
+		// Calculate all metrics
+		const issueCount = this.issues.length;
+		const completedCount = this.issues.filter(i => i.status === 'closed').length;
+		const inProgressCount = this.issues.filter(i => i.status === 'in_progress').length;
+
+		// Calculate blocked: has unresolved dependencies
+		const blockedCount = this.issues.filter(issue => {
+			if (issue.status === 'closed') return false;
+			return issue.dependencies.some(depId => {
+				const dep = this.issues.find(i => i.id === depId);
+				return dep && dep.status !== 'closed';
+			});
+		}).length;
+
+		// Calculate ready: open with no unresolved dependencies
+		const readyCount = this.issues.filter(issue => {
+			if (issue.status !== 'open') return false;
+			return issue.dependencies.every(depId => {
+				const dep = this.issues.find(i => i.id === depId);
+				return !dep || dep.status === 'closed';
+			});
+		}).length;
+
+		projectStore.updateCounts(this.currentProjectId, {
+			issueCount,
+			completedCount,
+			blockedCount,
+			inProgressCount,
+			readyCount
+		});
 	}
 
 	// Clear current project
