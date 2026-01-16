@@ -3,13 +3,14 @@
 	import { issueStore } from '$lib/stores/issues.svelte';
 	import { domainMetadata } from '$lib/schemas';
 	import type { DomainType } from '$lib/types/facts';
+	import GhostInput from '$lib/components/GhostInput.svelte';
+	import AITextarea from '$lib/components/AITextarea.svelte';
 
 	// State for creating new project
 	let showNewForm = $state(false);
 	let newProjectName = $state('');
 	let newProjectDescription = $state('');
 	let newProjectDomain = $state<DomainType | ''>('');
-	let nameManuallyEdited = $state(false);
 	let deleteConfirm = $state<string | null>(null);
 
 	// State for inline editing
@@ -37,16 +38,8 @@
 		return firstSentence.substring(0, 40).trim() + '...';
 	}
 
-	// Update name when description changes (if not manually edited)
-	$effect(() => {
-		if (newProjectDescription && !nameManuallyEdited) {
-			newProjectName = generateNameFromDescription(newProjectDescription);
-		}
-	});
-
-	function handleNameInput() {
-		nameManuallyEdited = true;
-	}
+	// Suggestion for project name (shown as ghost text when name is empty)
+	let nameSuggestion = $derived(generateNameFromDescription(newProjectDescription));
 
 	function handleFormKeydown(e: KeyboardEvent) {
 		e.stopImmediatePropagation();
@@ -56,7 +49,7 @@
 	}
 
 	function createProject() {
-		const name = newProjectName.trim() || generateNameFromDescription(newProjectDescription) || 'Untitled Project';
+		const name = newProjectName.trim() || nameSuggestion || 'Untitled Project';
 
 		const project = projectStore.create({
 			name,
@@ -70,7 +63,6 @@
 		newProjectName = '';
 		newProjectDescription = '';
 		newProjectDomain = '';
-		nameManuallyEdited = false;
 	}
 
 	function openProject(project: Project) {
@@ -263,30 +255,30 @@
 						<label for="project-desc" class="block text-sm font-medium text-slate-700 mb-1">
 							What do you want to accomplish?
 						</label>
-						<textarea
+						<AITextarea
 							id="project-desc"
 							bind:value={newProjectDescription}
 							placeholder="Describe your goal..."
-							rows="3"
+							rows={3}
+							context={newProjectDomain ? `Domain: ${domainMetadata[newProjectDomain]?.name || newProjectDomain}` : ''}
 							class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-							autofocus
-						></textarea>
+							autofocus={true}
+						/>
 					</div>
 
 					<div>
 						<label for="project-name" class="block text-sm font-medium text-slate-700 mb-1">
 							Project Name
-							{#if !nameManuallyEdited && newProjectDescription}
-								<span class="text-slate-400 font-normal">(auto-generated)</span>
+							{#if nameSuggestion && !newProjectName}
+								<span class="text-slate-400 font-normal">(Tab to accept suggestion)</span>
 							{/if}
 						</label>
-						<input
+						<GhostInput
 							id="project-name"
-							type="text"
 							bind:value={newProjectName}
-							oninput={handleNameInput}
+							suggestion={nameSuggestion}
 							placeholder="Project name"
-							class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 {!nameManuallyEdited && newProjectDescription ? 'bg-slate-50' : ''}"
+							class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
 						/>
 					</div>
 
@@ -318,7 +310,7 @@
 					</button>
 					<button
 						type="button"
-						onclick={() => { showNewForm = false; newProjectName = ''; newProjectDescription = ''; newProjectDomain = ''; nameManuallyEdited = false; }}
+						onclick={() => { showNewForm = false; newProjectName = ''; newProjectDescription = ''; newProjectDomain = ''; }}
 						class="py-2.5 px-4 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition-colors"
 					>
 						Cancel
