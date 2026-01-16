@@ -91,7 +91,7 @@ ${e.name} (${e.displayName}):
 ${e.attributes.map(a => `  - ${a.name}: ${a.type}${a.required ? ' [required]' : ''}`).join('\n')}`).join('\n')}
 
 EXISTING RELATIONSHIPS:
-${schema.relationships.map(r => `- ${r.from} → ${r.to}: ${r.type}`).join('\n')}
+${schema.relationships.map(r => `- ${r.fromEntity} → ${r.toEntity}: ${r.cardinality}`).join('\n')}
 `;
 
 	const observedFactsContext = `
@@ -181,8 +181,8 @@ Respond with ONLY valid JSON:
 			summary: parsed.summary,
 			impact: parsed.impact,
 			timestamp: new Date().toISOString(),
-			// Include thinking if available for transparency
-			reasoning: result.thinking
+			// Include content as reasoning for transparency
+			reasoning: result.content
 		});
 
 	} catch (error) {

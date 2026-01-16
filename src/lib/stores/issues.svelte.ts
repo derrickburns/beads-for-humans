@@ -502,6 +502,7 @@ class IssueStore {
 			content: string;
 			urlsReferenced?: string[];
 			actionsApplied?: string[];
+			images?: import('$lib/types/issue').ImageAttachment[];
 		}
 	): Issue | undefined {
 		const issue = this.getById(issueId);

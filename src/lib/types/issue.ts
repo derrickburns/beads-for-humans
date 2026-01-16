@@ -36,6 +36,14 @@ export interface AIAssignment {
 	lastActivityAt: string; // Updated on AI progress
 }
 
+// Image attachment for dialog messages
+export interface ImageAttachment {
+	id: string;
+	data: string;        // base64 encoded image data
+	mimeType: string;    // image/jpeg, image/png, etc.
+	name?: string;       // original filename
+}
+
 // Dialog message for task conversations
 export interface DialogMessage {
 	role: 'user' | 'assistant';
@@ -43,6 +51,7 @@ export interface DialogMessage {
 	timestamp: string;
 	urlsReferenced?: string[];  // URLs the user shared
 	actionsApplied?: string[];  // Actions that were applied from this message
+	images?: ImageAttachment[]; // Images attached to this message
 }
 
 // AI Agenda - what the AI wants to do/ask/gather

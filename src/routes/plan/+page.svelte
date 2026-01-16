@@ -683,7 +683,7 @@
 
 				<!-- Validation Checkpoints -->
 				{#if projectPlan.validationCheckpoints && projectPlan.validationCheckpoints.length > 0}
-					{@const checkpointTasks = projectPlan.tasks.filter(t => projectPlan.validationCheckpoints.includes(t.id))}
+					{@const checkpointTasks = projectPlan.tasks.filter(t => projectPlan?.validationCheckpoints?.includes(t.id))}
 					{#if checkpointTasks.length > 0}
 						<div class="p-4 bg-purple-50 border border-purple-200 rounded-xl">
 							<div class="flex items-center gap-2 mb-3">

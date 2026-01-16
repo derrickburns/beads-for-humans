@@ -70,7 +70,7 @@
 		});
 
 		// Show follow-up suggestions
-		createdIssue = newIssue;
+		createdIssue = newIssue ?? null;
 		expandedResult = null;
 	}
 

@@ -813,7 +813,7 @@ const mortgageEntity: EntityDefinition = {
 			description: 'Original loan term in years',
 			type: 'number',
 			required: false,
-			allowedValues: [10, 15, 20, 25, 30],
+			allowedValues: ['10', '15', '20', '25', '30'],
 			extractionHints: ['loan documents']
 		},
 		{
@@ -1469,7 +1469,7 @@ export const debtManagementSchema: DomainSchema = {
 			name: 'worksWithAdvisor',
 			fromEntity: 'Debtor',
 			toEntity: 'DebtAdvisor',
-			cardinality: 'many-to-one',
+			cardinality: 'many-to-many',
 			description: 'Debtor works with advisor'
 		}
 	],

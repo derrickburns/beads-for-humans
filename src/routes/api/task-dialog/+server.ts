@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import type { Issue, IssueType, IssuePriority, ScopeBoundary, Constraint, Concern } from '$lib/types/issue';
-import { chatCompletion } from '$lib/ai/provider';
+import type { Issue, IssueType, IssuePriority, ScopeBoundary, Constraint, Concern, ImageAttachment } from '$lib/types/issue';
+import { chatCompletion, buildVisionContent } from '$lib/ai/provider';
 
 interface DialogMessage {
 	role: 'user' | 'assistant';
@@ -151,12 +151,13 @@ Keep it conversational and brief (2-3 sentences max). Don't be generic - tailor 
 	}
 
 	// Regular message handling
-	const { task, message, history, context, urlContents, model, apiKey } = body as {
+	const { task, message, history, context, urlContents, images, model, apiKey } = body as {
 		task: Issue;
 		message: string;
 		history: DialogMessage[];
 		context: RichContext;
 		urlContents?: UrlContent[];
+		images?: ImageAttachment[];  // Screenshots/images attached to this message
 		model?: string;
 		apiKey?: string;
 	};
@@ -555,10 +556,23 @@ Use these entity names consistently:
 - Account identifiers (policy numbers, account numbers)
 - Institution names (Fidelity, Vanguard, Geico)`;
 
+	// Build user message - use vision content blocks if images are attached
+	let userMessageContent: string | ReturnType<typeof buildVisionContent>;
+	if (images && images.length > 0) {
+		// Add context about the images
+		const imageContext = `\n\n[The user has attached ${images.length} screenshot(s). Please analyze them carefully to extract any relevant information for this task.]`;
+		userMessageContent = buildVisionContent(
+			message + imageContext,
+			images.map(img => ({ data: img.data, mimeType: img.mimeType }))
+		);
+	} else {
+		userMessageContent = message;
+	}
+
 	const messages = [
 		{ role: 'system' as const, content: systemPrompt },
 		...history.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-		{ role: 'user' as const, content: message }
+		{ role: 'user' as const, content: userMessageContent }
 	];
 
 	try {

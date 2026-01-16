@@ -41,6 +41,15 @@
 		nameManuallyEdited = true;
 	}
 
+	function handleFormKeydown(e: KeyboardEvent) {
+		// Prevent any keyboard shortcuts from triggering while in the form
+		e.stopImmediatePropagation();
+		// Prevent Enter from submitting
+		if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'TEXTAREA') {
+			e.preventDefault();
+		}
+	}
+
 	function createProject() {
 		const name = newProjectName.trim() || generateNameFromDescription(newProjectDescription) || 'Untitled Project';
 
@@ -86,6 +95,10 @@
 	}
 
 	function handleEditKeydown(e: KeyboardEvent) {
+		// Stop propagation to prevent parent button from being triggered
+		e.stopPropagation();
+		e.stopImmediatePropagation();
+
 		if (e.key === 'Enter') {
 			e.preventDefault();
 			saveProjectName();
@@ -130,7 +143,11 @@
 
 		<!-- New Project Button / Form -->
 		{#if showNewForm}
-			<div class="bg-white rounded-2xl shadow-lg p-6 mb-8 border border-gray-200">
+			<form
+				onsubmit={(e) => e.preventDefault()}
+				onkeydown={handleFormKeydown}
+				class="bg-white rounded-2xl shadow-lg p-6 mb-8 border border-gray-200"
+			>
 				<h2 class="text-xl font-semibold text-gray-900 mb-4">New Project</h2>
 
 				<div class="space-y-4">
@@ -192,6 +209,7 @@
 
 				<div class="flex gap-3 mt-6">
 					<button
+						type="button"
 						onclick={createProject}
 						disabled={!newProjectDescription.trim() && !newProjectName.trim()}
 						class="flex-1 py-2.5 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -199,13 +217,14 @@
 						Create Project
 					</button>
 					<button
+						type="button"
 						onclick={() => { showNewForm = false; newProjectName = ''; newProjectDescription = ''; newProjectDomain = ''; nameManuallyEdited = false; }}
 						class="py-2.5 px-4 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
 					>
 						Cancel
 					</button>
 				</div>
-			</div>
+			</form>
 		{:else}
 			<button
 				onclick={() => (showNewForm = true)}

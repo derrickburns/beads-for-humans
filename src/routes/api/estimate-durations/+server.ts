@@ -100,7 +100,7 @@ Provide realistic duration estimates in calendar days. Consider weekends and typ
 			apiKey
 		});
 
-		const content = response.choices[0]?.message?.content || '';
+		const content = response.content || '';
 
 		// Parse JSON from response
 		const jsonMatch = content.match(/\{[\s\S]*\}/);

@@ -104,7 +104,7 @@ Provide realistic cost estimates. Include alternatives for saving money where ap
 			apiKey
 		});
 
-		const content = response.choices[0]?.message?.content || '';
+		const content = response.content || '';
 
 		// Parse JSON from response
 		const jsonMatch = content.match(/\{[\s\S]*\}/);

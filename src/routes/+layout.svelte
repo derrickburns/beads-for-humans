@@ -15,8 +15,9 @@
 	let showShortcuts = $state(false);
 
 	// Load project on mount if there's a saved current project
+	// Only load if the issueStore isn't already tracking this project
 	$effect(() => {
-		if (browser && projectStore.currentProjectId && issueStore.issues.length === 0) {
+		if (browser && projectStore.currentProjectId && issueStore.currentProjectId !== projectStore.currentProjectId) {
 			issueStore.loadProject(projectStore.currentProjectId);
 		}
 	});
@@ -114,12 +115,6 @@
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
 							</svg>
 							Plan Project
-						</a>
-						<a
-							href="/import"
-							class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors hidden sm:block"
-						>
-							Bulk Import
 						</a>
 						<a
 							href="/issue/new"

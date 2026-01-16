@@ -1,8 +1,23 @@
 import { env } from '$env/dynamic/private';
 
+// Content block for vision API (text or image)
+export interface TextContent {
+	type: 'text';
+	text: string;
+}
+
+export interface ImageContent {
+	type: 'image_url';
+	image_url: {
+		url: string;  // data:image/jpeg;base64,... format
+	};
+}
+
+export type ContentBlock = TextContent | ImageContent;
+
 export interface ChatMessage {
 	role: 'user' | 'assistant' | 'system';
-	content: string;
+	content: string | ContentBlock[];  // Support both text and content arrays for vision
 }
 
 export interface ChatCompletionOptions {
@@ -44,13 +59,13 @@ export async function chatCompletion(
 	const supportsExtendedThinking = model.includes('claude') &&
 		(model.includes('sonnet') || model.includes('opus'));
 
-	// Build request body
+	// Build request body - preserve content structure for vision support
 	const requestBody: Record<string, unknown> = {
 		model,
 		max_tokens: maxTokens,
 		messages: options.messages.map((m) => ({
 			role: m.role,
-			content: m.content
+			content: m.content  // Can be string or ContentBlock[] for vision
 		}))
 	};
 
@@ -123,13 +138,14 @@ export async function* chatCompletionStream(
 	const supportsExtendedThinking = model.includes('claude') &&
 		(model.includes('sonnet') || model.includes('opus'));
 
+	// Build request body - preserve content structure for vision support
 	const requestBody: Record<string, unknown> = {
 		model,
 		max_tokens: maxTokens,
 		stream: true,
 		messages: options.messages.map((m) => ({
 			role: m.role,
-			content: m.content
+			content: m.content  // Can be string or ContentBlock[] for vision
 		}))
 	};
 
@@ -215,4 +231,28 @@ export async function* chatCompletionStream(
 	} catch (error) {
 		yield { type: 'error', data: String(error) };
 	}
+}
+
+/**
+ * Helper to build content blocks with text and images
+ * @param text The text message
+ * @param images Array of base64 images with mimeType
+ * @returns Content that can be used in ChatMessage
+ */
+export function buildVisionContent(
+	text: string,
+	images: Array<{ data: string; mimeType: string }>
+): ContentBlock[] {
+	const content: ContentBlock[] = [{ type: 'text', text }];
+
+	for (const img of images) {
+		content.push({
+			type: 'image_url',
+			image_url: {
+				url: `data:${img.mimeType};base64,${img.data}`
+			}
+		});
+	}
+
+	return content;
 }

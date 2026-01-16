@@ -1301,7 +1301,7 @@ export const taxPlanningSchema: DomainSchema = {
 			name: 'usesTaxProfessional',
 			fromEntity: 'TaxFiler',
 			toEntity: 'TaxProfessional',
-			cardinality: 'many-to-one',
+			cardinality: 'many-to-many',
 			description: 'Tax filer uses tax professional'
 		}
 	],

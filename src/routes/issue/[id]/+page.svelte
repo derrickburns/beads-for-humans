@@ -12,8 +12,8 @@
 	import PlanningAssistant from '$lib/components/PlanningAssistant.svelte';
 	import TaskDialog from '$lib/components/TaskDialog.svelte';
 
-	let id = $derived($page.params.id);
-	let issue = $derived(issueStore.getById(id));
+	let id = $derived($page.params.id ?? '');
+	let issue = $derived(id ? issueStore.getById(id) ?? null : null);
 
 	// Check if this is a newly created issue (from ?new=true param)
 	let isNewIssue = $derived($page.url.searchParams.get('new') === 'true');
