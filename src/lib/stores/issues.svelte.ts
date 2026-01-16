@@ -15,7 +15,13 @@ import type {
 	ScopeBoundary
 } from '$lib/types/issue';
 
-const STORAGE_KEY = 'issues';
+const STORAGE_KEY_PREFIX = 'issues-';
+const LEGACY_STORAGE_KEY = 'issues';
+
+// Get storage key for a project
+function getStorageKey(projectId: string | null): string {
+	return projectId ? `${STORAGE_KEY_PREFIX}${projectId}` : LEGACY_STORAGE_KEY;
+}
 
 function generateId(): string {
 	return crypto.randomUUID();
@@ -70,10 +76,11 @@ function validateLoadedIssues(issues: Issue[]): Issue[] {
 	});
 }
 
-function loadIssues(): Issue[] {
+function loadIssues(projectId: string | null = null): Issue[] {
 	if (!browser) return [];
 	try {
-		const stored = localStorage.getItem(STORAGE_KEY);
+		const key = getStorageKey(projectId);
+		const stored = localStorage.getItem(key);
 		if (!stored) return [];
 		const parsed = JSON.parse(stored) as Issue[];
 		return validateLoadedIssues(parsed);
@@ -83,14 +90,33 @@ function loadIssues(): Issue[] {
 	}
 }
 
-function saveIssues(issues: Issue[]): void {
+function saveIssues(issues: Issue[], projectId: string | null = null): void {
 	if (browser) {
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(issues));
+		const key = getStorageKey(projectId);
+		localStorage.setItem(key, JSON.stringify(issues));
 	}
 }
 
 class IssueStore {
-	issues = $state<Issue[]>(loadIssues());
+	issues = $state<Issue[]>([]);
+	currentProjectId = $state<string | null>(null);
+
+	// Load issues for a specific project
+	loadProject(projectId: string | null): void {
+		this.currentProjectId = projectId;
+		this.issues = loadIssues(projectId);
+	}
+
+	// Save current issues (called internally after mutations)
+	private save(): void {
+		saveIssues(this.issues, this.currentProjectId);
+	}
+
+	// Clear current project
+	clearProject(): void {
+		this.currentProjectId = null;
+		this.issues = [];
+	}
 
 	// Computed: issues grouped by status
 	get byStatus() {
@@ -411,7 +437,7 @@ class IssueStore {
 			executionReason: data.executionReason
 		};
 		this.issues = [...this.issues, issue];
-		saveIssues(this.issues);
+		this.save();
 		return issue;
 	}
 
@@ -458,7 +484,7 @@ class IssueStore {
 			updatedAt: new Date().toISOString()
 		};
 		this.issues = [...this.issues.slice(0, index), updated, ...this.issues.slice(index + 1)];
-		saveIssues(this.issues);
+		this.save();
 		return updated;
 	}
 
@@ -758,7 +784,7 @@ class IssueStore {
 				...i,
 				dependencies: i.dependencies.filter((depId) => depId !== id)
 			}));
-		saveIssues(this.issues);
+		this.save();
 		return true;
 	}
 
