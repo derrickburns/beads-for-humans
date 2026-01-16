@@ -44,7 +44,7 @@
 
 		// Generic starters
 		starters.push("Let me tell you what I have...");
-		starters.push("I need help understanding this");
+		starters.push("Here's a link with details...");
 
 		// Type-specific starters
 		if (task.type === 'task') {
@@ -59,6 +59,27 @@
 		}
 
 		return starters;
+	}
+
+	// Extract URLs from text
+	function extractUrls(text: string): string[] {
+		const urlRegex = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
+		return text.match(urlRegex) || [];
+	}
+
+	// Fetch content from a URL
+	async function fetchUrlContent(url: string): Promise<{ url: string; content: string; error?: string }> {
+		try {
+			const response = await fetch('/api/fetch-url', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ url })
+			});
+			const data = await response.json();
+			return { url, content: data.content || '', error: data.error };
+		} catch {
+			return { url, content: '', error: 'Failed to fetch URL' };
+		}
 	}
 
 	async function sendMessage(content: string) {
@@ -76,8 +97,55 @@
 			}
 		}, 50);
 
+		// Check for URLs and fetch their content
+		const urls = extractUrls(content);
+		let urlContents: Array<{ url: string; content: string }> = [];
+
+		if (urls.length > 0) {
+			// Show fetching status
+			const fetchResults = await Promise.all(urls.slice(0, 3).map(fetchUrlContent));
+			urlContents = fetchResults.filter(r => r.content && !r.error);
+		}
+
 		try {
 			const { model, apiKey } = aiSettings.getRequestSettings();
+
+			// Build rich context for the AI
+			const ancestors = issueStore.getAncestors(issue.id);
+			const parent = issueStore.getParent(issue.id);
+			const siblings = parent ? issueStore.getChildren(parent.id).filter(s => s.id !== issue.id) : [];
+			const children = issueStore.getChildren(issue.id);
+			const blockers = issueStore.getBlockers(issue.id);
+			const blocking = issueStore.getBlocking(issue.id);
+			const constraints = issueStore.getEffectiveConstraints(issue.id);
+			const rootGoal = ancestors.length > 0 ? ancestors[ancestors.length - 1] : (issue.type === 'goal' ? issue : null);
+
+			const richContext = {
+				// Hierarchy
+				ancestors: ancestors.map(a => ({ id: a.id, title: a.title, type: a.type, status: a.status })),
+				parent: parent ? { id: parent.id, title: parent.title, type: parent.type, decompositionType: parent.decompositionType } : null,
+				siblings: siblings.map(s => ({ id: s.id, title: s.title, type: s.type, status: s.status })),
+				children: children.map(c => ({ id: c.id, title: c.title, type: c.type, status: c.status })),
+
+				// Dependencies
+				blockedBy: blockers.map(b => ({ id: b.id, title: b.title, status: b.status })),
+				blocks: blocking.map(b => ({ id: b.id, title: b.title, status: b.status })),
+
+				// Constraints & Scope
+				constraints: constraints.map(c => ({ type: c.type, description: c.description, value: c.value, unit: c.unit })),
+				scopeBoundary: rootGoal?.scopeBoundary || null,
+				successCriteria: issue.successCriteria || [],
+
+				// Concerns already surfaced
+				existingConcerns: (issue.concerns || []).map(c => ({ type: c.type, title: c.title, status: c.status })),
+
+				// Project context (limited to relevant issues)
+				projectIssues: issueStore.issues
+					.filter(i => i.id !== issue.id)
+					.slice(0, 15)
+					.map(i => ({ id: i.id, title: i.title, type: i.type, status: i.status }))
+			};
+
 			const response = await fetch('/api/task-dialog', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -85,7 +153,8 @@
 					task: issue,
 					message: content.trim(),
 					history: messages.filter(m => !m.actions).map(m => ({ role: m.role, content: m.content })),
-					existingIssues: issueStore.issues,
+					context: richContext,
+					urlContents: urlContents.length > 0 ? urlContents : undefined,
 					model,
 					apiKey
 				})
