@@ -430,11 +430,10 @@
 				// Concerns already surfaced
 				existingConcerns: (issue.concerns || []).map(c => ({ type: c.type, title: c.title, status: c.status })),
 
-				// Project context (limited to relevant issues)
+				// Project context (ALL issues including current - for overlap detection)
 				projectIssues: issueStore.issues
-					.filter(i => i.id !== issue.id)
-					.slice(0, 15)
-					.map(i => ({ id: i.id, title: i.title, type: i.type, status: i.status })),
+					.slice(0, 50)
+					.map(i => ({ id: i.id, title: i.title, type: i.type, status: i.status, description: i.description })),
 
 				// Related dialog history - the AI's memory of discussions on related tasks
 				relatedDialogs
