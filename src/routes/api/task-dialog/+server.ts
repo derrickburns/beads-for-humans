@@ -63,7 +63,7 @@ interface RichContext {
 }
 
 interface SuggestedAction {
-	type: 'update_task' | 'create_subtask' | 'mark_complete' | 'add_dependency' | 'add_concern' | 'ask_question' | 'update_scope' | 'add_constraint' | 'add_uncertainty_parameter' | 'suggest_simulation';
+	type: 'update_task' | 'create_subtask' | 'mark_complete' | 'add_dependency' | 'add_concern' | 'ask_question' | 'update_scope' | 'add_constraint' | 'add_uncertainty_parameter' | 'suggest_simulation' | 'extract_fact';
 	description: string;
 	data?: {
 		title?: string;
@@ -86,6 +86,15 @@ interface SuggestedAction {
 		iterations?: number;
 		timeHorizon?: number;
 		confidenceLevel?: number;
+		// Fact extraction
+		entity?: string;
+		attribute?: string;
+		value?: unknown;
+		valueType?: string;
+		currency?: string;
+		confidence?: number;
+		extractedPhrase?: string;
+		effectiveDate?: string;
 	};
 }
 
@@ -336,6 +345,7 @@ After each response, output a JSON block with actions AND your agenda (what you 
 - **add_concern**: Surface a risk, assumption, or gap (include concernType: "assumption" | "risk" | "gap")
 - **add_constraint**: Add a budget, timeline, or scope constraint
 - **update_scope**: Suggest adding to in-scope or out-of-scope lists
+- **extract_fact**: Extract a verifiable fact for the validation store (see Fact Extraction below)
 
 **Agenda items:**
 - **pendingQuestions**: Things you need the human to answer (so system can remind them later)
@@ -436,7 +446,67 @@ When presenting uncertainty analysis:
 - Explain what the numbers mean: "There's a 5% chance you'll run out of money before age 85"
 - Give actionable ranges: "You need between \$1.2M and \$1.8M to retire comfortably"
 - Recommend hedges: "Consider a bond tent in your first 5 years of retirement"
-- Be honest about limitations: "These projections assume historical patterns continue"`;
+- Be honest about limitations: "These projections assume historical patterns continue"
+
+## Fact Extraction
+
+Every conversation contains VERIFIABLE FACTS. Your job is to extract them for the validation store.
+
+### What to Extract
+Extract concrete facts that:
+- A third party could VERIFY (e.g., Social Security benefit amount, policy number)
+- Are SPECIFIC (numbers, dates, names, amounts - not opinions)
+- Support the planning process (contact info, account details, dates)
+
+### How to Extract
+When the user shares information, output extract_fact actions:
+
+\`\`\`json
+{
+  "type": "extract_fact",
+  "description": "Extract Social Security benefit at full retirement age",
+  "data": {
+    "entity": "SocialSecurity",
+    "attribute": "estimatedMonthlyAtFRA",
+    "value": 2850,
+    "valueType": "currency",
+    "currency": "USD",
+    "confidence": 0.95,
+    "extractedPhrase": "my statement says $2,850 per month at 67",
+    "effectiveDate": "2024-01-15"
+  }
+}
+\`\`\`
+
+### Entity Types
+Use these entity names consistently:
+- **Person**: Name, birth date, SSN
+- **SocialSecurity**: Benefits, start dates
+- **RetirementAccount**: 401k, IRA balances
+- **Pension**: Pension benefits
+- **Insurance**: Policies, coverage
+- **Contact**: Advisor, attorney, agent info
+
+### Value Types
+- **string**: Text values
+- **number**: Plain numbers
+- **currency**: Money (include currency field, value as number without formatting)
+- **percentage**: As decimal (0.07 for 7%)
+- **date**: ISO format (2024-01-15)
+- **contact**: Object with name, phone, email, address
+
+### Confidence Levels
+- 0.9-1.0: User stated explicitly
+- 0.7-0.9: Inferred from strong evidence
+- 0.5-0.7: Reasonable inference
+- Below 0.5: Don't extract, ask for clarification
+
+### Always Extract From
+- Numbers the user mentions (balances, benefits, premiums)
+- Dates (birth dates, start dates, renewal dates)
+- Contact information (names, phone, email)
+- Account identifiers (policy numbers, account numbers)
+- Institution names (Fidelity, Vanguard, Geico)`;
 
 	const messages = [
 		{ role: 'system' as const, content: systemPrompt },

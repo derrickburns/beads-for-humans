@@ -1341,3 +1341,288 @@ const simulation = await fetch('/api/run-simulation', {
 // - probabilityOfRuin: 0.08
 // - recommendations: ["Consider reducing withdrawal rate to 3.5%", ...]
 ```
+
+---
+
+## Extracted Facts System
+
+For tracking verifiable information extracted from conversations and documents.
+
+### ExtractedFact
+
+A single piece of verified information.
+
+```typescript
+interface ExtractedFact {
+  id: string;
+
+  // The fact itself
+  entity: string;             // "SocialSecurity", "RetirementAccount"
+  attribute: string;          // "monthlyBenefit", "currentBalance"
+  value: FactValue;           // Typed value
+
+  // Provenance
+  source: FactSource;         // Where this came from
+
+  // Validation
+  validationStatus: 'unverified' | 'user_confirmed' | 'externally_verified' | 'disputed';
+  validatedAt?: string;
+  validatedBy?: string;
+
+  // Schema reference
+  domainId: string;
+  schemaVersion: string;
+
+  // Temporal
+  effectiveDate?: string;     // When this fact is/was true
+  expiresAt?: string;         // When to re-verify
+
+  // Linkage
+  projectId: string;
+  issueId?: string;
+
+  extractedAt: string;
+  updatedAt: string;
+}
+```
+
+### FactValue
+
+Typed value with unit support.
+
+```typescript
+interface FactValue {
+  type: 'string' | 'number' | 'boolean' | 'date' | 'currency' | 'percentage' | 'duration' | 'contact' | 'document_ref';
+  raw: string | number | boolean;
+  currency?: string;          // For currency
+  asDecimal?: number;         // For percentage (0.07 for 7%)
+  unit?: 'days' | 'months' | 'years'; // For duration
+  contact?: {                 // For contact info
+    name?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    organization?: string;
+  };
+}
+```
+
+### FactSource
+
+Provenance tracking for facts.
+
+```typescript
+interface FactSource {
+  type: 'dialog' | 'document' | 'external_query' | 'manual_entry' | 'calculated';
+
+  // For dialog
+  dialogMessageId?: string;
+  extractedPhrase?: string;
+
+  // For document
+  documentId?: string;
+  documentName?: string;
+  pageNumber?: number;
+
+  // For external query
+  externalUrl?: string;
+  sessionId?: string;
+
+  confidence: number;         // 0-1
+  aiModel?: string;
+}
+```
+
+### DomainSchema
+
+Schema defining expected facts for a domain.
+
+```typescript
+interface DomainSchema {
+  id: string;
+  domain: DomainType;
+  name: string;
+  version: string;
+  description: string;
+
+  entities: EntityDefinition[];
+  relationships: RelationshipDefinition[];
+  validationRules: ValidationRule[];
+  requiredFacts: string[];    // e.g., ["SocialSecurity.monthlyBenefit"]
+  exportTemplates: ExportTemplate[];
+
+  isBuiltIn: boolean;
+}
+
+type DomainType =
+  | 'retirement_planning'
+  | 'estate_planning'
+  | 'home_renovation'
+  | 'insurance_review'
+  | 'tax_planning'
+  | 'debt_management'
+  | 'investment_portfolio'
+  | 'business_planning'
+  | 'healthcare_planning'
+  | 'education_planning'
+  | 'custom';
+```
+
+### Document
+
+Uploaded document for extraction.
+
+```typescript
+interface Document {
+  id: string;
+  projectId: string;
+  name: string;
+  type: 'pdf' | 'image' | 'csv' | 'excel' | 'text' | 'html' | 'other';
+  mimeType: string;
+  size: number;
+  storagePath: string;
+  hash: string;
+
+  extractionStatus: 'pending' | 'processing' | 'completed' | 'failed';
+  extractedFactIds: string[];
+  extractionError?: string;
+
+  uploadedAt: string;
+  processedAt?: string;
+}
+```
+
+### ExternalSession
+
+Session for extracting data from external sites.
+
+```typescript
+interface ExternalSession {
+  id: string;
+  projectId: string;
+
+  siteName: string;           // "Social Security Administration"
+  siteUrl: string;
+  purpose: string;
+
+  status: 'pending_login' | 'active' | 'extracting' | 'completed' | 'expired' | 'failed';
+
+  handoffRequestedAt: string;
+  userLoggedInAt?: string;
+  sessionHandedOffAt?: string;
+
+  extractedFactIds: string[];
+}
+```
+
+---
+
+## Facts API Endpoints
+
+### POST /api/extract-facts
+
+Extract structured facts from content using AI.
+
+#### Request
+```typescript
+{
+  content: string;            // Text to extract from
+  contentType: 'dialog' | 'document' | 'url';
+  sourceMetadata?: {
+    documentId?: string;
+    dialogMessageId?: string;
+    url?: string;
+  };
+  domain?: string;            // Domain type for schema
+  projectId: string;
+  existingFacts?: Array<{ entity: string; attribute: string; value: unknown }>;
+  model?: string;
+  apiKey?: string;
+}
+```
+
+#### Response
+```typescript
+{
+  facts: ExtractedFact[];
+  notes: string;              // AI observations
+  suggestedQuestions: string[]; // Questions to get missing facts
+  factCount: number;
+  extractedAt: string;
+}
+```
+
+### Facts Store Methods
+
+The `factsStore` provides methods for managing extracted facts:
+
+```typescript
+// Initialize for a project
+factsStore.initProject(projectId: string, domains: DomainType[]): void
+
+// Add a domain
+factsStore.addDomain(domain: DomainType): void
+
+// Add or update a fact
+factsStore.addFact(fact: Omit<ExtractedFact, 'id' | 'extractedAt' | 'updatedAt'>): ExtractedFact
+
+// Get facts for entity
+factsStore.getFactsForEntity(entity: string): ExtractedFact[]
+
+// Get specific fact value
+factsStore.getFactValue(entity: string, attribute: string): FactValue | undefined
+
+// Update validation status
+factsStore.updateValidation(factId: string, status: string, validatedBy?: string): ExtractedFact
+
+// Get completeness for domain
+factsStore.getCompleteness(domain: DomainType): { requiredFacts: number; extractedFacts: number; percentage: number }
+
+// Get missing required facts
+factsStore.getMissingRequiredFacts(domain: DomainType): string[]
+
+// Export to JSON
+factsStore.exportToJson(options?: { entities?: string[]; includeUnverified?: boolean }): string
+
+// Export to CSV
+factsStore.exportToCsv(entities?: string[]): string
+
+// Document management
+factsStore.addDocument(doc: Omit<Document, 'id' | 'uploadedAt'>): Document
+factsStore.updateDocumentStatus(docId: string, status: string, extractedFactIds?: string[]): Document
+
+// External session management
+factsStore.createExternalSession(siteName: string, siteUrl: string, purpose: string): ExternalSession
+factsStore.updateSessionStatus(sessionId: string, status: string, extractedFactIds?: string[]): ExternalSession
+```
+
+### Built-in Domain Schemas
+
+#### Retirement Planning
+Entities: Person, SocialSecurity, RetirementAccount, Pension, RetirementExpense
+
+Key required facts:
+- Person.name, Person.birthDate, Person.retirementAge
+- SocialSecurity.estimatedMonthlyAtFRA, SocialSecurity.plannedStartAge
+
+#### Example: Retirement Account Entity
+```typescript
+{
+  name: 'RetirementAccount',
+  displayName: 'Retirement Account',
+  category: 'asset',
+  allowMultiple: true,
+  identifierAttribute: 'accountName',
+  attributes: [
+    { name: 'accountName', type: 'string', required: true },
+    { name: 'accountType', type: 'string', required: true,
+      allowedValues: ['401k', 'traditional_ira', 'roth_ira', 'roth_401k', '403b', '457b', 'sep_ira', 'pension', 'annuity'] },
+    { name: 'institution', type: 'string', required: true },
+    { name: 'currentBalance', type: 'currency', required: true },
+    { name: 'balanceAsOfDate', type: 'date', required: true },
+    { name: 'monthlyContribution', type: 'currency', required: false },
+    { name: 'employerMatch', type: 'currency', required: false },
+    { name: 'beneficiary', type: 'string', required: false }
+  ]
+}
+```

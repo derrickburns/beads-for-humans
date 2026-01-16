@@ -376,6 +376,83 @@ After running simulations, you get:
 
 This transforms vague uncertainty into actionable insight.
 
+## Extracted Facts & Validation
+
+Planning produces information that third parties need to verify. A retirement plan, for example, contains specific claims: "Social Security benefit is $2,850/month starting at age 67." These claims need to be:
+
+1. **Extracted** from conversations and documents
+2. **Stored** in a structured, queryable format
+3. **Verified** against authoritative sources
+4. **Exported** for advisors, attorneys, or family members
+
+### The Facts Store
+
+Beads automatically extracts facts during every conversation and stores them in a validation-ready format:
+
+```
+Entity: SocialSecurity
+Attribute: estimatedMonthlyAtFRA
+Value: $2,850
+Source: Dialog on 2024-01-15
+Confidence: 0.95
+Status: User Confirmed
+Verification: https://www.ssa.gov/myaccount/
+```
+
+### Domain Schemas
+
+Different planning domains have different data requirements. Beads includes pre-built schemas for common domains:
+
+- **Retirement Planning**: Social Security, retirement accounts, pensions, expenses
+- **Estate Planning**: Wills, trusts, beneficiaries, assets
+- **Insurance Review**: Policies, coverage, premiums, agents
+- **Home Renovation**: Contractors, costs, timelines, materials
+
+Schemas define:
+- What entities exist (e.g., "RetirementAccount")
+- What attributes each entity has (e.g., "currentBalance", "institution")
+- Which facts are required vs. optional
+- How to verify each fact (document, API, attestation)
+
+### Automatic Extraction
+
+During every conversation, the AI:
+1. Listens for concrete facts (numbers, dates, names)
+2. Extracts them into structured form
+3. Associates them with the appropriate entity/attribute
+4. Records the source phrase for auditability
+
+"I have $450,000 in my Fidelity 401k" becomes:
+```
+Entity: RetirementAccount
+Instance: Fidelity 401k
+Attribute: currentBalance
+Value: $450,000
+Extracted: "I have $450,000 in my Fidelity 401k"
+```
+
+### Validation Workflow
+
+Facts move through validation states:
+1. **Unverified**: Extracted from conversation
+2. **User Confirmed**: User explicitly confirmed the value
+3. **Externally Verified**: Verified against authoritative source
+4. **Disputed**: User or system flagged as incorrect
+
+### External Data Sources
+
+For authoritative verification, Beads supports:
+- **Document Upload**: Upload statements, policies, tax returns
+- **Session Handoff**: User logs into site, hands session to AI for extraction
+- **API Integration**: Direct queries to supported services
+
+### Export Formats
+
+Facts can be exported for external use:
+- **JSON**: Structured data for integration
+- **CSV**: Spreadsheet-friendly tabular format
+- **PDF**: Formatted reports for advisors or family
+
 ## Why This Approach Works
 
 ### Accuracy Over Precision
