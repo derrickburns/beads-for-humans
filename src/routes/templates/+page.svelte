@@ -3,7 +3,7 @@
 </script>
 
 <svelte:head>
-	<title>Project Templates - Middle Manager</title>
+	<title>Project Templates - Chief of Staff</title>
 </svelte:head>
 
 <div class="max-w-5xl mx-auto">

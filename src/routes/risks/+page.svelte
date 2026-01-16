@@ -3,7 +3,7 @@
 </script>
 
 <svelte:head>
-	<title>Risk Register - Middle Manager</title>
+	<title>Risk Register - Chief of Staff</title>
 </svelte:head>
 
 <div class="max-w-4xl mx-auto">

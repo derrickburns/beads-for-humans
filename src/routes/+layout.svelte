@@ -59,7 +59,7 @@
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
-	<title>Middle Manager</title>
+	<title>Chief of Staff</title>
 </svelte:head>
 
 {#if projectStore.current}

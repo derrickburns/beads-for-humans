@@ -3,7 +3,7 @@
 </script>
 
 <svelte:head>
-	<title>Budget Tracker - Middle Manager</title>
+	<title>Budget Tracker - Chief of Staff</title>
 </svelte:head>
 
 <div class="max-w-5xl mx-auto">

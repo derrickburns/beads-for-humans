@@ -4,7 +4,7 @@
 </script>
 
 <svelte:head>
-	<title>Decision Matrix - Middle Manager</title>
+	<title>Decision Matrix - Chief of Staff</title>
 </svelte:head>
 
 <div class="max-w-4xl mx-auto">

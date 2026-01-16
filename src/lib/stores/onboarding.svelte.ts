@@ -13,7 +13,7 @@ export interface OnboardingStep {
 export const onboardingSteps: OnboardingStep[] = [
 	{
 		id: 'welcome',
-		title: 'Welcome to Middle Manager',
+		title: 'Welcome to Chief of Staff',
 		description: 'I\'m your AI planning assistant. I\'ll help you break down complex projects into manageable tasks - no project management experience needed.',
 		action: 'Let\'s take a quick tour'
 	},

@@ -86,7 +86,7 @@ export async function chatCompletion(
 				'Content-Type': 'application/json',
 				'Authorization': `Bearer ${apiKey}`,
 				'HTTP-Referer': env.SITE_URL || 'http://localhost:5173',
-				'X-Title': 'Middle Manager'
+				'X-Title': 'Chief of Staff'
 			},
 			body: JSON.stringify(requestBody)
 		});
@@ -164,7 +164,7 @@ export async function* chatCompletionStream(
 				'Content-Type': 'application/json',
 				'Authorization': `Bearer ${apiKey}`,
 				'HTTP-Referer': env.SITE_URL || 'http://localhost:5173',
-				'X-Title': 'Middle Manager'
+				'X-Title': 'Chief of Staff'
 			},
 			body: JSON.stringify(requestBody)
 		});

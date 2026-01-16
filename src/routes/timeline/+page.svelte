@@ -3,7 +3,7 @@
 </script>
 
 <svelte:head>
-	<title>Project Timeline - Middle Manager</title>
+	<title>Project Timeline - Chief of Staff</title>
 </svelte:head>
 
 <div class="max-w-6xl mx-auto">

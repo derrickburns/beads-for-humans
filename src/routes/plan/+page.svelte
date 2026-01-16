@@ -444,7 +444,7 @@
 </script>
 
 <svelte:head>
-	<title>Plan Your Project - Middle Manager</title>
+	<title>Plan Your Project - Chief of Staff</title>
 </svelte:head>
 
 <div class="max-w-4xl mx-auto">
