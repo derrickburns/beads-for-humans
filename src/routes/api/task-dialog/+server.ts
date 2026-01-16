@@ -104,7 +104,54 @@ interface UrlContent {
 }
 
 export const POST: RequestHandler = async ({ request }) => {
-	const { task, message, history, context, urlContents, model, apiKey } = (await request.json()) as {
+	const body = await request.json();
+
+	// Handle initial message case (AI leads the conversation)
+	if (body.isInitialMessage) {
+		const { issue, model, apiKey } = body as {
+			issue: { id: string; title: string; description?: string; type: string; status: string; priority: number };
+			model?: string;
+			apiKey?: string;
+		};
+
+		const initialPrompt = `You are a helpful planning assistant. The user just opened a task dialog for this task:
+
+**Task:** ${issue.title}
+${issue.description ? `**Description:** ${issue.description}` : ''}
+**Type:** ${issue.type}
+**Status:** ${issue.status}
+**Priority:** P${issue.priority}
+
+Your job is to lead the conversation and help them make progress on this task. Start with a warm, helpful opening that:
+1. Shows you understand what this task is about
+2. Asks a specific, relevant question to get them started
+3. Offers 1-2 concrete ways you can help
+
+Keep it conversational and brief (2-3 sentences max). Don't be generic - tailor your opening to THIS specific task.`;
+
+		try {
+			const result = await chatCompletion({
+				messages: [{ role: 'user', content: initialPrompt }],
+				maxTokens: 500,
+				model,
+				apiKey
+			});
+
+			if (result.error || !result.content) {
+				return json({ error: result.error || 'No response from AI' });
+			}
+
+			return json({
+				message: result.content,
+				suggestedActions: []
+			});
+		} catch (error) {
+			return json({ error: String(error) });
+		}
+	}
+
+	// Regular message handling
+	const { task, message, history, context, urlContents, model, apiKey } = body as {
 		task: Issue;
 		message: string;
 		history: DialogMessage[];

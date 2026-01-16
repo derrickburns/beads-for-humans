@@ -9,18 +9,43 @@
 	let newProjectName = $state('');
 	let newProjectDescription = $state('');
 	let newProjectDomain = $state<DomainType | ''>('');
+	let nameManuallyEdited = $state(false);
 	let deleteConfirm = $state<string | null>(null);
+
+	// State for inline editing
+	let editingProjectId = $state<string | null>(null);
+	let editingName = $state('');
 
 	// Available domain types
 	const domains = Object.entries(domainMetadata).filter(
 		([key]) => key !== 'custom'
 	) as [DomainType, { name: string; description: string; icon: string }][];
 
+	// Auto-generate project name from description
+	function generateNameFromDescription(desc: string): string {
+		if (!desc.trim()) return '';
+		// Take first sentence or first 40 chars
+		const firstSentence = desc.split(/[.!?]/)[0].trim();
+		if (firstSentence.length <= 40) return firstSentence;
+		return firstSentence.substring(0, 40).trim() + '...';
+	}
+
+	// Update name when description changes (if not manually edited)
+	$effect(() => {
+		if (newProjectDescription && !nameManuallyEdited) {
+			newProjectName = generateNameFromDescription(newProjectDescription);
+		}
+	});
+
+	function handleNameInput() {
+		nameManuallyEdited = true;
+	}
+
 	function createProject() {
-		if (!newProjectName.trim()) return;
+		const name = newProjectName.trim() || generateNameFromDescription(newProjectDescription) || 'Untitled Project';
 
 		const project = projectStore.create({
-			name: newProjectName.trim(),
+			name,
 			description: newProjectDescription.trim() || undefined,
 			domain: newProjectDomain || undefined
 		});
@@ -33,6 +58,7 @@
 		newProjectName = '';
 		newProjectDescription = '';
 		newProjectDomain = '';
+		nameManuallyEdited = false;
 	}
 
 	function openProject(project: Project) {
@@ -43,6 +69,30 @@
 	function deleteProject(projectId: string) {
 		projectStore.delete(projectId);
 		deleteConfirm = null;
+	}
+
+	function startEditingName(project: Project, e: MouseEvent) {
+		e.stopPropagation();
+		editingProjectId = project.id;
+		editingName = project.name;
+	}
+
+	function saveProjectName() {
+		if (editingProjectId && editingName.trim()) {
+			projectStore.update(editingProjectId, { name: editingName.trim() });
+		}
+		editingProjectId = null;
+		editingName = '';
+	}
+
+	function handleEditKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			saveProjectName();
+		} else if (e.key === 'Escape') {
+			editingProjectId = null;
+			editingName = '';
+		}
 	}
 
 	function formatDate(isoDate: string): string {
@@ -84,30 +134,50 @@
 				<h2 class="text-xl font-semibold text-gray-900 mb-4">New Project</h2>
 
 				<div class="space-y-4">
+					<!-- Description first -->
+					<div>
+						<label for="project-desc" class="block text-sm font-medium text-gray-700 mb-1">
+							What do you want to accomplish?
+						</label>
+						<textarea
+							id="project-desc"
+							bind:value={newProjectDescription}
+							placeholder="Describe your goal... (a name will be generated automatically)"
+							rows="3"
+							class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+							autofocus
+						></textarea>
+					</div>
+
+					<!-- Project name (auto-generated, editable) -->
 					<div>
 						<label for="project-name" class="block text-sm font-medium text-gray-700 mb-1">
 							Project Name
+							{#if !nameManuallyEdited && newProjectDescription}
+								<span class="text-gray-400 font-normal">(auto-generated, click to edit)</span>
+							{/if}
 						</label>
 						<input
 							id="project-name"
 							type="text"
 							bind:value={newProjectName}
-							placeholder="e.g., Retirement Planning, Home Renovation"
-							class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-							autofocus
+							oninput={handleNameInput}
+							placeholder="Project name"
+							class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 {!nameManuallyEdited && newProjectDescription ? 'bg-gray-50' : ''}"
 						/>
 					</div>
 
+					<!-- Domain selection -->
 					<div>
 						<label for="project-domain" class="block text-sm font-medium text-gray-700 mb-1">
-							Planning Domain (Optional)
+							Planning Domain <span class="text-gray-400 font-normal">(optional)</span>
 						</label>
 						<select
 							id="project-domain"
 							bind:value={newProjectDomain}
 							class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
 						>
-							<option value="">Select a domain for AI assistance...</option>
+							<option value="">Select for AI assistance...</option>
 							{#each domains as [key, meta]}
 								<option value={key}>{meta.icon} {meta.name}</option>
 							{/each}
@@ -118,31 +188,18 @@
 							</p>
 						{/if}
 					</div>
-
-					<div>
-						<label for="project-desc" class="block text-sm font-medium text-gray-700 mb-1">
-							Description (Optional)
-						</label>
-						<textarea
-							id="project-desc"
-							bind:value={newProjectDescription}
-							placeholder="What are you planning to accomplish?"
-							rows="2"
-							class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-						></textarea>
-					</div>
 				</div>
 
 				<div class="flex gap-3 mt-6">
 					<button
 						onclick={createProject}
-						disabled={!newProjectName.trim()}
+						disabled={!newProjectDescription.trim() && !newProjectName.trim()}
 						class="flex-1 py-2.5 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 					>
 						Create Project
 					</button>
 					<button
-						onclick={() => showNewForm = false}
+						onclick={() => { showNewForm = false; newProjectName = ''; newProjectDescription = ''; newProjectDomain = ''; nameManuallyEdited = false; }}
 						class="py-2.5 px-4 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
 					>
 						Cancel
@@ -151,7 +208,7 @@
 			</div>
 		{:else}
 			<button
-				onclick={() => showNewForm = true}
+				onclick={() => (showNewForm = true)}
 				class="w-full py-4 px-6 bg-blue-600 text-white font-medium rounded-2xl hover:bg-blue-700 transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-3 mb-8"
 			>
 				<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -181,9 +238,25 @@
 											{#if project.domain && domainMetadata[project.domain]}
 												<span class="text-2xl">{domainMetadata[project.domain].icon}</span>
 											{/if}
-											<h3 class="text-lg font-semibold text-gray-900 truncate">
-												{project.name}
-											</h3>
+											{#if editingProjectId === project.id}
+												<input
+													type="text"
+													bind:value={editingName}
+													onkeydown={handleEditKeydown}
+													onblur={saveProjectName}
+													onclick={(e) => e.stopPropagation()}
+													class="text-lg font-semibold text-gray-900 px-2 py-1 border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+													autofocus
+												/>
+											{:else}
+												<h3
+													class="text-lg font-semibold text-gray-900 truncate hover:text-blue-600 cursor-text"
+													onclick={(e) => startEditingName(project, e)}
+													title="Click to edit name"
+												>
+													{project.name}
+												</h3>
+											{/if}
 										</div>
 										{#if project.description}
 											<p class="text-sm text-gray-500 line-clamp-2 mb-2">
@@ -202,7 +275,7 @@
 								</div>
 							</button>
 
-							<!-- Delete button (shown on hover via group) -->
+							<!-- Delete button -->
 							<div class="border-t border-gray-100 px-5 py-2 bg-gray-50 flex justify-end">
 								{#if deleteConfirm === project.id}
 									<div class="flex items-center gap-2">
@@ -243,8 +316,7 @@
 				</div>
 				<h3 class="text-lg font-medium text-gray-900 mb-2">No projects yet</h3>
 				<p class="text-gray-500 mb-6 max-w-md mx-auto">
-					Start a new project to begin planning. Choose a domain like retirement planning,
-					debt management, or estate planning for AI-assisted guidance.
+					Start a new project to begin planning. Describe what you want to accomplish and we'll help you break it down.
 				</p>
 			</div>
 		{/if}
@@ -257,7 +329,6 @@
 					{#each domains.slice(0, 6) as [key, meta]}
 						<button
 							onclick={() => {
-								newProjectName = meta.name;
 								newProjectDomain = key;
 								showNewForm = true;
 							}}

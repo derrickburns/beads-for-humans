@@ -48,6 +48,58 @@
 	let editing = $state(false);
 	let showDeleteConfirm = $state(false);
 	let showTaskDialog = $state(false);
+
+	// Inline editing state
+	let editingTitle = $state(false);
+	let editingDescription = $state(false);
+	let editTitleValue = $state('');
+	let editDescriptionValue = $state('');
+
+	function startEditingTitle() {
+		if (!issue) return;
+		editTitleValue = issue.title;
+		editingTitle = true;
+	}
+
+	function saveTitle() {
+		if (!issue || !editTitleValue.trim()) {
+			editingTitle = false;
+			return;
+		}
+		issueStore.update(issue.id, { title: editTitleValue.trim() });
+		editingTitle = false;
+	}
+
+	function startEditingDescription() {
+		if (!issue) return;
+		editDescriptionValue = issue.description || '';
+		editingDescription = true;
+	}
+
+	function saveDescription() {
+		if (!issue) {
+			editingDescription = false;
+			return;
+		}
+		issueStore.update(issue.id, { description: editDescriptionValue.trim() || undefined });
+		editingDescription = false;
+	}
+
+	function handleTitleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			saveTitle();
+		} else if (e.key === 'Escape') {
+			editingTitle = false;
+		}
+	}
+
+	function handleDescriptionKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') {
+			editingDescription = false;
+		}
+		// Allow Enter for newlines in description
+	}
 	let showAddDependency = $state(false);
 	let showAddBlocking = $state(false);
 	let showCreateRelated = $state(false);
@@ -359,7 +411,24 @@
 								{TYPE_LABELS[issue.type]}
 							</span>
 						</div>
-						<h1 class="text-2xl font-semibold text-gray-900">{issue.title}</h1>
+						{#if editingTitle}
+							<input
+								type="text"
+								bind:value={editTitleValue}
+								onkeydown={handleTitleKeydown}
+								onblur={saveTitle}
+								class="text-2xl font-semibold text-gray-900 w-full px-2 py-1 border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+								autofocus
+							/>
+						{:else}
+							<h1
+								class="text-2xl font-semibold text-gray-900 hover:text-blue-600 cursor-text"
+								onclick={startEditingTitle}
+								title="Click to edit title"
+							>
+								{issue.title}
+							</h1>
+						{/if}
 					</div>
 
 					<div class="flex items-center gap-2">
@@ -440,12 +509,49 @@
 				{/if}
 
 				<!-- Description -->
-				{#if issue.description}
-					<div>
-						<h3 class="text-sm font-medium text-gray-500 mb-2">Description</h3>
-						<p class="text-gray-900 whitespace-pre-wrap">{issue.description}</p>
-					</div>
-				{/if}
+				<div>
+					<h3 class="text-sm font-medium text-gray-500 mb-2">Description</h3>
+					{#if editingDescription}
+						<textarea
+							bind:value={editDescriptionValue}
+							onkeydown={handleDescriptionKeydown}
+							onblur={saveDescription}
+							rows="4"
+							class="w-full px-3 py-2 text-gray-900 border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+							placeholder="Add a description..."
+							autofocus
+						></textarea>
+						<div class="mt-2 flex gap-2">
+							<button
+								onclick={saveDescription}
+								class="px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700"
+							>
+								Save
+							</button>
+							<button
+								onclick={() => (editingDescription = false)}
+								class="px-3 py-1 text-sm font-medium text-gray-600 bg-gray-100 rounded hover:bg-gray-200"
+							>
+								Cancel
+							</button>
+						</div>
+					{:else if issue.description}
+						<p
+							class="text-gray-900 whitespace-pre-wrap hover:bg-gray-50 cursor-text p-2 -m-2 rounded"
+							onclick={startEditingDescription}
+							title="Click to edit description"
+						>
+							{issue.description}
+						</p>
+					{:else}
+						<button
+							onclick={startEditingDescription}
+							class="text-gray-400 hover:text-gray-600 text-sm italic"
+						>
+							Click to add description...
+						</button>
+					{/if}
+				</div>
 
 				<!-- Quick Status Change -->
 				<div>

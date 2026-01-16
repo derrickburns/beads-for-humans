@@ -46,14 +46,67 @@
 	}
 
 	// Track that user is working on this task
-	$effect(() => {
-		sessionState.setActiveTask(issue.id, issue.title);
-	});
+	// Note: Temporarily disabled to debug browser freeze
+	// sessionState.setActiveTask(issue.id, issue.title);
 
 	let messages = $state<DialogMessage[]>(loadExistingHistory());
 	let inputValue = $state('');
 	let isLoading = $state(false);
 	let messagesContainer = $state<HTMLDivElement | null>(null);
+	let hasInitialized = $state(false);
+
+	// Auto-start conversation if no history
+	$effect(() => {
+		if (!hasInitialized && messages.length === 0 && aiSettings.isConfigured && !isLoading) {
+			hasInitialized = true;
+			startConversation();
+		}
+	});
+
+	async function startConversation() {
+		isLoading = true;
+
+		try {
+			const response = await fetch('/api/task-dialog', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					issueId: issue.id,
+					issue: {
+						id: issue.id,
+						title: issue.title,
+						description: issue.description,
+						type: issue.type,
+						status: issue.status,
+						priority: issue.priority
+					},
+					messages: [],
+					isInitialMessage: true
+				})
+			});
+
+			const data = await response.json();
+
+			if (data.message) {
+				const assistantMessage: DialogMessage = {
+					role: 'assistant',
+					content: data.message,
+					actions: data.suggestedActions
+				};
+				messages = [assistantMessage];
+
+				// Persist to store
+				issueStore.addDialogMessage(issue.id, {
+					role: 'assistant',
+					content: data.message
+				});
+			}
+		} catch (e) {
+			console.error('Failed to start conversation:', e);
+		} finally {
+			isLoading = false;
+		}
+	}
 
 	// Quick starters based on task type
 	const quickStarters = $derived(getQuickStarters(issue));
@@ -476,19 +529,19 @@
 				Configure AI in the top menu to use task dialog.
 			</p>
 		{:else}
-			<div class="flex gap-2">
-				<input
-					type="text"
+			<div class="flex gap-2 items-end">
+				<textarea
 					bind:value={inputValue}
 					onkeydown={handleKeydown}
-					placeholder="Share what you know or ask for help..."
+					placeholder="Share what you know or ask for help... (Shift+Enter for new line)"
 					disabled={isLoading}
-					class="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-50"
-				/>
+					rows="2"
+					class="flex-1 px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-50 resize-none"
+				></textarea>
 				<button
 					onclick={() => sendMessage(inputValue)}
 					disabled={!inputValue.trim() || isLoading}
-					class="px-4 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+					class="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors h-10"
 					aria-label="Send message"
 				>
 					<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
