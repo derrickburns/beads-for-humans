@@ -7,9 +7,10 @@
 	interface Props {
 		issue: Issue;
 		onClose?: () => void;
+		embedded?: boolean;  // When true, renders as panel instead of modal-style
 	}
 
-	let { issue, onClose }: Props = $props();
+	let { issue, onClose, embedded = false }: Props = $props();
 
 	interface DialogMessage {
 		role: 'user' | 'assistant';
@@ -614,7 +615,7 @@
 	};
 </script>
 
-<div class="flex flex-col h-full bg-white rounded-xl border border-gray-200 overflow-hidden">
+<div class="flex flex-col h-full bg-white {embedded ? '' : 'rounded-xl border border-gray-200'} overflow-hidden">
 	<!-- Header -->
 	<div class="px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50 flex items-center justify-between">
 		<div class="flex items-center gap-2">

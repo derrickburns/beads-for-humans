@@ -20,8 +20,10 @@
 	interface Props {
 		focusId?: string | null;
 		focusedIssueId?: string | null;
+		currentIssueId?: string | null;  // The issue currently being viewed (shows "YOU ARE HERE")
+		onNodeSelect?: (issueId: string) => void;  // Callback when a node is selected
 	}
-	let { focusId = null, focusedIssueId = $bindable<string | null>(null) }: Props = $props();
+	let { focusId = null, focusedIssueId = $bindable<string | null>(null), currentIssueId = null, onNodeSelect }: Props = $props();
 
 	// Layout constants
 	const NODE_WIDTH = 320;
@@ -648,7 +650,11 @@
 	}
 
 	function navigateToIssue(id: string) {
-		goto(`/issue/${id}`);
+		if (onNodeSelect) {
+			onNodeSelect(id);
+		} else {
+			goto(`/issue/${id}`);
+		}
 	}
 
 	// AI Suggestions
@@ -1090,6 +1096,7 @@
 					{@const statusColor = getStatusColor(pos.issue.status, isBlocked)}
 					{@const statusBg = getStatusBg(pos.issue.status, isBlocked)}
 					{@const isFocused = focusedIssueId === pos.issue.id}
+					{@const isCurrentIssue = currentIssueId === pos.issue.id}
 					{@const isSuggested = activeSuggestions.some((s) => s.targetId === pos.issue.id)}
 					{@const hasAI = !!pos.issue.aiAssignment}
 					{@const needsHuman = !!pos.issue.needsHuman}
@@ -1159,14 +1166,36 @@
 							/>
 						{/if}
 
+						<!-- Current issue highlight ("YOU ARE HERE") -->
+						{#if isCurrentIssue}
+							<rect
+								x="-6"
+								y="-6"
+								width={NODE_WIDTH + 12}
+								height={pos.height + 12}
+								rx="14"
+								fill="none"
+								stroke="#10b981"
+								stroke-width="4"
+								opacity="0.8"
+							/>
+							<!-- "YOU ARE HERE" badge -->
+							<g transform="translate({NODE_WIDTH / 2 - 50}, -28)">
+								<rect x="0" y="0" width="100" height="22" rx="11" fill="#10b981" />
+								<text x="50" y="15" font-size="11" fill="white" text-anchor="middle" font-weight="bold">
+									YOU ARE HERE
+								</text>
+							</g>
+						{/if}
+
 						<!-- Main node rectangle -->
 						<rect
 							width={NODE_WIDTH}
 							height={pos.height}
 							rx="10"
-							fill={isSuggested ? '#faf5ff' : needsHuman ? '#fef2f2' : statusBg}
-							stroke={needsHuman ? '#ef4444' : isFocused ? '#3b82f6' : isSuggested ? '#9333ea' : statusColor}
-							stroke-width={needsHuman || isFocused || isSuggested ? 3 : 2}
+							fill={isSuggested ? '#faf5ff' : needsHuman ? '#fef2f2' : isCurrentIssue ? '#ecfdf5' : statusBg}
+							stroke={isCurrentIssue ? '#10b981' : needsHuman ? '#ef4444' : isFocused ? '#3b82f6' : isSuggested ? '#9333ea' : statusColor}
+							stroke-width={isCurrentIssue || needsHuman || isFocused || isSuggested ? 3 : 2}
 							class="transition-all duration-200"
 						/>
 
