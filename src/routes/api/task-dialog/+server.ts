@@ -29,6 +29,13 @@ interface ConcernRef {
 	status: string;
 }
 
+interface RelatedDialogRef {
+	issueId: string;
+	issueTitle: string;
+	relationship: 'parent' | 'sibling' | 'child' | 'blocker';
+	messages: Array<{ role: 'user' | 'assistant'; content: string; timestamp: string }>;
+}
+
 interface RichContext {
 	// Hierarchy
 	ancestors: IssueRef[];
@@ -50,6 +57,9 @@ interface RichContext {
 
 	// Project
 	projectIssues: IssueRef[];
+
+	// Related dialog history - the AI's long-term memory from related tasks
+	relatedDialogs?: RelatedDialogRef[];
 }
 
 interface SuggestedAction {
@@ -162,6 +172,27 @@ ${context.existingConcerns.map(c => `- [${c.status}] ${c.type}: ${c.title}`).joi
 ${context.projectIssues.map(i => `- "${i.title}" (${i.type}, ${i.status})`).join('\n')}`);
 	}
 
+	// Related dialog history - the AI's long-term memory from conversations on related tasks
+	// CRITICAL: This is how you remember what was discussed on parent/sibling/blocker tasks
+	// Never ask questions that have already been answered in these conversations
+	if (context.relatedDialogs && context.relatedDialogs.length > 0) {
+		const dialogSections = context.relatedDialogs.map(rd => {
+			const messagesText = rd.messages.map(m =>
+				`[${m.role === 'user' ? 'Human' : 'AI'}]: ${m.content}`
+			).join('\n');
+			return `### ${rd.relationship.toUpperCase()}: "${rd.issueTitle}"
+${messagesText}`;
+		}).join('\n\n');
+
+		contextSections.push(`## Prior Conversations on Related Tasks
+IMPORTANT: These are verbatim conversations from related tasks. Use this context to:
+1. Never re-ask questions that were already answered
+2. Build on information already gathered
+3. Understand what the user has already shared
+
+${dialogSections}`);
+	}
+
 	// URL contents shared by user
 	if (urlContents && urlContents.length > 0) {
 		contextSections.push(`## Web Content Shared by User
@@ -182,6 +213,14 @@ ${contextSections.join('\n\n')}
 5. **Track progress** - Suggest marking things complete or creating subtasks as appropriate
 
 ## Guidelines
+
+### Long-term Memory - NEVER Re-Ask
+You are the user's long-term memory. You have access to ALL prior conversations on this task AND related tasks (parent, siblings, blockers).
+- NEVER ask a question that has already been answered in any conversation
+- ALWAYS build on information already gathered
+- Reference what you know: "You mentioned you have Geico auto insurance..."
+- If information seems incomplete, fill in gaps: "For homeowner's insurance, you haven't mentioned the provider yet - who is that through?"
+- Treat the user as if they may have forgotten what they told you - remind them and extend
 
 ### Be Specific, Not Open-Ended
 WRONG: "Do you have any other insurance policies?"

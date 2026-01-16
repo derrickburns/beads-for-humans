@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { issueStore } from '$lib/stores/issues.svelte';
 	import { aiSettings } from '$lib/stores/aiSettings.svelte';
-	import type { Issue, IssueType, IssuePriority } from '$lib/types/issue';
+	import type { Issue, IssueType, IssuePriority, DialogMessage as StoredDialogMessage } from '$lib/types/issue';
 
 	interface Props {
 		issue: Issue;
@@ -14,6 +14,8 @@
 		role: 'user' | 'assistant';
 		content: string;
 		actions?: SuggestedAction[];
+		urlsReferenced?: string[];
+		actionsApplied?: string[];
 	}
 
 	interface SuggestedAction {
@@ -31,7 +33,18 @@
 		};
 	}
 
-	let messages = $state<DialogMessage[]>([]);
+	// Load existing dialog history from the store - the AI's long-term memory
+	function loadExistingHistory(): DialogMessage[] {
+		const stored = issueStore.getDialogHistory(issue.id);
+		return stored.map(m => ({
+			role: m.role,
+			content: m.content,
+			urlsReferenced: m.urlsReferenced,
+			actionsApplied: m.actionsApplied
+		}));
+	}
+
+	let messages = $state<DialogMessage[]>(loadExistingHistory());
 	let inputValue = $state('');
 	let isLoading = $state(false);
 	let messagesContainer = $state<HTMLDivElement | null>(null);
@@ -85,10 +98,25 @@
 	async function sendMessage(content: string) {
 		if (!content.trim() || isLoading || !aiSettings.isConfigured) return;
 
-		const userMessage: DialogMessage = { role: 'user', content: content.trim() };
+		// Check for URLs and fetch their content
+		const urls = extractUrls(content);
+		let urlContents: Array<{ url: string; content: string }> = [];
+
+		const userMessage: DialogMessage = {
+			role: 'user',
+			content: content.trim(),
+			urlsReferenced: urls.length > 0 ? urls : undefined
+		};
 		messages = [...messages, userMessage];
 		inputValue = '';
 		isLoading = true;
+
+		// Persist user message to store immediately - this is the AI's long-term memory
+		issueStore.addDialogMessage(issue.id, {
+			role: 'user',
+			content: content.trim(),
+			urlsReferenced: urls.length > 0 ? urls : undefined
+		});
 
 		// Scroll to bottom
 		setTimeout(() => {
@@ -97,12 +125,8 @@
 			}
 		}, 50);
 
-		// Check for URLs and fetch their content
-		const urls = extractUrls(content);
-		let urlContents: Array<{ url: string; content: string }> = [];
-
 		if (urls.length > 0) {
-			// Show fetching status
+			// Fetch URL content
 			const fetchResults = await Promise.all(urls.slice(0, 3).map(fetchUrlContent));
 			urlContents = fetchResults.filter(r => r.content && !r.error);
 		}
@@ -119,6 +143,9 @@
 			const blocking = issueStore.getBlocking(issue.id);
 			const constraints = issueStore.getEffectiveConstraints(issue.id);
 			const rootGoal = ancestors.length > 0 ? ancestors[ancestors.length - 1] : (issue.type === 'goal' ? issue : null);
+
+			// Get dialog history from related issues - AI never forgets prior discussions
+			const relatedDialogs = issueStore.getRelatedDialogContext(issue.id);
 
 			const richContext = {
 				// Hierarchy
@@ -143,7 +170,10 @@
 				projectIssues: issueStore.issues
 					.filter(i => i.id !== issue.id)
 					.slice(0, 15)
-					.map(i => ({ id: i.id, title: i.title, type: i.type, status: i.status }))
+					.map(i => ({ id: i.id, title: i.title, type: i.type, status: i.status })),
+
+				// Related dialog history - the AI's memory of discussions on related tasks
+				relatedDialogs
 			};
 
 			const response = await fetch('/api/task-dialog', {
@@ -163,22 +193,39 @@
 			const data = await response.json();
 
 			if (data.error) {
-				messages = [...messages, {
+				const errorMessage: DialogMessage = {
 					role: 'assistant',
 					content: `Sorry, I encountered an error: ${data.error}`
-				}];
+				};
+				messages = [...messages, errorMessage];
+				// Still persist error responses so we know what happened
+				issueStore.addDialogMessage(issue.id, {
+					role: 'assistant',
+					content: errorMessage.content
+				});
 			} else {
-				messages = [...messages, {
+				const assistantMessage: DialogMessage = {
 					role: 'assistant',
 					content: data.response,
 					actions: data.actions
-				}];
+				};
+				messages = [...messages, assistantMessage];
+				// Persist assistant response - part of the permanent record
+				issueStore.addDialogMessage(issue.id, {
+					role: 'assistant',
+					content: data.response
+				});
 			}
 		} catch (error) {
-			messages = [...messages, {
+			const errorMessage: DialogMessage = {
 				role: 'assistant',
 				content: 'Sorry, something went wrong. Please try again.'
-			}];
+			};
+			messages = [...messages, errorMessage];
+			issueStore.addDialogMessage(issue.id, {
+				role: 'assistant',
+				content: errorMessage.content
+			});
 		} finally {
 			isLoading = false;
 			// Scroll to bottom
@@ -251,7 +298,7 @@
 				break;
 		}
 
-		// Mark as applied
+		// Mark as applied in local state
 		messages = messages.map((m, i) => {
 			if (i === messageIndex && m.actions) {
 				return {
@@ -262,6 +309,15 @@
 				};
 			}
 			return m;
+		});
+
+		// Record the action in the persistent dialog history
+		// This ensures the AI knows what actions were taken and never re-suggests them
+		const actionDescription = `[Action Applied] ${action.type}: ${action.description}`;
+		issueStore.addDialogMessage(issue.id, {
+			role: 'assistant',
+			content: actionDescription,
+			actionsApplied: [action.description]
 		});
 	}
 

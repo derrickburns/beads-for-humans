@@ -466,6 +466,116 @@ class IssueStore {
 		return this.update(id, { status });
 	}
 
+	// === Dialog History Management ===
+	// Dialog history is the AI's long-term memory - never lose it, always build on it
+
+	addDialogMessage(
+		issueId: string,
+		message: {
+			role: 'user' | 'assistant';
+			content: string;
+			urlsReferenced?: string[];
+			actionsApplied?: string[];
+		}
+	): Issue | undefined {
+		const issue = this.getById(issueId);
+		if (!issue) return undefined;
+
+		const dialogMessage = {
+			...message,
+			timestamp: new Date().toISOString()
+		};
+
+		const existingHistory = issue.dialogHistory || [];
+		return this.update(issueId, {
+			dialogHistory: [...existingHistory, dialogMessage]
+		});
+	}
+
+	getDialogHistory(issueId: string): Array<{
+		role: 'user' | 'assistant';
+		content: string;
+		timestamp: string;
+		urlsReferenced?: string[];
+		actionsApplied?: string[];
+	}> {
+		const issue = this.getById(issueId);
+		return issue?.dialogHistory || [];
+	}
+
+	// Get dialog context from related issues (parent, siblings) for richer AI context
+	getRelatedDialogContext(issueId: string): Array<{
+		issueId: string;
+		issueTitle: string;
+		relationship: 'parent' | 'sibling' | 'child' | 'blocker';
+		messages: Array<{ role: 'user' | 'assistant'; content: string; timestamp: string }>;
+	}> {
+		const issue = this.getById(issueId);
+		if (!issue) return [];
+
+		const relatedDialogs: Array<{
+			issueId: string;
+			issueTitle: string;
+			relationship: 'parent' | 'sibling' | 'child' | 'blocker';
+			messages: Array<{ role: 'user' | 'assistant'; content: string; timestamp: string }>;
+		}> = [];
+
+		// Parent dialog context
+		if (issue.parentId) {
+			const parent = this.getById(issue.parentId);
+			if (parent?.dialogHistory?.length) {
+				relatedDialogs.push({
+					issueId: parent.id,
+					issueTitle: parent.title,
+					relationship: 'parent',
+					messages: parent.dialogHistory.map(m => ({
+						role: m.role,
+						content: m.content,
+						timestamp: m.timestamp
+					}))
+				});
+			}
+		}
+
+		// Sibling dialog context (same parent)
+		if (issue.parentId) {
+			const siblings = this.getChildren(issue.parentId).filter(s => s.id !== issueId);
+			for (const sibling of siblings) {
+				if (sibling.dialogHistory?.length) {
+					relatedDialogs.push({
+						issueId: sibling.id,
+						issueTitle: sibling.title,
+						relationship: 'sibling',
+						messages: sibling.dialogHistory.map(m => ({
+							role: m.role,
+							content: m.content,
+							timestamp: m.timestamp
+						}))
+					});
+				}
+			}
+		}
+
+		// Blocker dialog context
+		const blockers = this.getBlockers(issueId);
+		for (const blocker of blockers) {
+			if (blocker.dialogHistory?.length) {
+				relatedDialogs.push({
+					issueId: blocker.id,
+					issueTitle: blocker.title,
+					relationship: 'blocker',
+					messages: blocker.dialogHistory.map(m => ({
+						role: m.role,
+						content: m.content,
+						timestamp: m.timestamp
+					}))
+				});
+			}
+		}
+
+		return relatedDialogs;
+	}
+
 	// Check if adding a dependency would create a cycle
 	wouldCreateCycle(issueId: string, dependsOnId: string): boolean {
 		if (issueId === dependsOnId) return true;

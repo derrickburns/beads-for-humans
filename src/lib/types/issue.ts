@@ -36,6 +36,15 @@ export interface AIAssignment {
 	lastActivityAt: string; // Updated on AI progress
 }
 
+// Dialog message for task conversations
+export interface DialogMessage {
+	role: 'user' | 'assistant';
+	content: string;
+	timestamp: string;
+	urlsReferenced?: string[];  // URLs the user shared
+	actionsApplied?: string[];  // Actions that were applied from this message
+}
+
 // Human attention tracking
 export interface NeedsHumanReason {
 	trigger: NeedsHumanTrigger;
@@ -182,6 +191,9 @@ export interface Issue {
 	// === Hierarchy (parent-child decomposition) ===
 	parentId?: string;                       // This issue is a child of parent
 	decompositionType?: DecompositionType;   // How children combine (default: 'and')
+
+	// === Dialog History ===
+	dialogHistory?: DialogMessage[];         // Conversation history for this task
 
 	// === Scope & Constraints ===
 	scopeBoundary?: ScopeBoundary;           // What's in/out of scope (for goals)
