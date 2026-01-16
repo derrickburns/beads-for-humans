@@ -407,6 +407,7 @@ Different planning domains have different data requirements. Beads includes pre-
 - **Estate Planning**: Wills, trusts, beneficiaries, assets, powers of attorney
 - **Insurance Review**: Auto, home, life, health, disability, umbrella, and long-term care policies
 - **Tax Planning**: W-2 income, self-employment, investments, deductions, credits, estimated payments
+- **Debt Management**: Credit cards, personal loans, student loans, auto loans, mortgages, medical debt, collections, payoff strategies
 
 Schemas define:
 - What entities exist (e.g., "RetirementAccount")

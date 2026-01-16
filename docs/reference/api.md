@@ -1626,6 +1626,21 @@ Key required facts:
 - TaxFiler.name, TaxFiler.filingStatus, TaxFiler.birthDate, TaxFiler.state
 - TaxSummary.taxYear
 
+#### Debt Management
+Entities: Debtor, CreditCard, PersonalLoan, StudentLoan, AutoLoan, Mortgage, MedicalDebt, CollectionAccount, DebtSummary, DebtAdvisor
+
+Key required facts:
+- Debtor.name, Debtor.monthlyIncome, Debtor.monthlyTakeHome
+- DebtSummary.totalDebt, DebtSummary.totalMinimumPayments
+
+Validation rules include:
+- Credit utilization warnings (30% and 50% thresholds)
+- Debt-to-income ratio checks
+- Intro APR expiration alerts
+- ARM adjustment warnings
+- PMI removal eligibility
+- PSLF progress tracking
+
 ---
 
 ## Schema API Endpoints

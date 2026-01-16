@@ -6,6 +6,7 @@ import { retirementPlanningSchema } from './retirement';
 import { estatePlanningSchema } from './estate';
 import { insuranceReviewSchema } from './insurance';
 import { taxPlanningSchema } from './tax';
+import { debtManagementSchema } from './debt';
 
 // ============================================
 // SCHEMA VERSIONING & MIGRATION
@@ -70,7 +71,7 @@ export const builtInSchemas: Record<DomainType, DomainSchema | null> = {
 	home_renovation: null,      // TODO: Implement
 	insurance_review: insuranceReviewSchema,
 	tax_planning: taxPlanningSchema,
-	debt_management: null,      // TODO: Implement
+	debt_management: debtManagementSchema,
 	investment_portfolio: null, // TODO: Implement
 	business_planning: null,    // TODO: Implement
 	healthcare_planning: null,  // TODO: Implement
@@ -376,3 +377,4 @@ export { retirementPlanningSchema };
 export { estatePlanningSchema };
 export { insuranceReviewSchema };
 export { taxPlanningSchema };
+export { debtManagementSchema };
