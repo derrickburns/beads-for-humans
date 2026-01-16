@@ -6,7 +6,7 @@
 	import { PRIORITY_LABELS, TYPE_LABELS, STATUS_LABELS } from '$lib/types/issue';
 	import type { IssueStatus } from '$lib/types/issue';
 	import IssueForm from '$lib/components/IssueForm.svelte';
-	import TaskDialog from '$lib/components/TaskDialog.svelte';
+	import TaskDialog, { type ProposedIssue } from '$lib/components/TaskDialog.svelte';
 	import DependencyGraph from '$lib/components/DependencyGraph.svelte';
 
 	let id = $derived($page.params.id ?? '');
@@ -18,6 +18,30 @@
 	// UI state
 	let editing = $state(false);
 	let showDeleteConfirm = $state(false);
+
+	// Bidirectional linking between graph and dialog
+	let proposedIssues = $state<ProposedIssue[]>([]);
+	let highlightedProposedId = $state<string | null>(null);
+
+	// Callbacks for graph ↔ dialog communication
+	function handleProposedChange(proposed: ProposedIssue[]) {
+		proposedIssues = proposed;
+	}
+
+	function handleGraphProposedHover(id: string | null) {
+		highlightedProposedId = id;
+	}
+
+	function handleDialogSuggestionHover(id: string | null) {
+		highlightedProposedId = id;
+	}
+
+	function handleProposedSelect(proposedId: string) {
+		// When clicking a ghost node, scroll to and highlight the suggestion in the dialog
+		// For now, just highlight it - the dialog will show the visual feedback
+		highlightedProposedId = proposedId;
+		// Could also trigger acceptance here if desired
+	}
 
 	// Status change
 	function handleStatusChange(newStatus: IssueStatus) {
@@ -98,7 +122,11 @@
 		<div class="flex-1 min-w-0 border-r border-gray-200 bg-gray-50">
 			<DependencyGraph
 				currentIssueId={issue.id}
+				{proposedIssues}
+				{highlightedProposedId}
 				onNodeSelect={handleNodeSelect}
+				onProposedSelect={handleProposedSelect}
+				onProposedHover={handleGraphProposedHover}
 			/>
 		</div>
 
@@ -169,7 +197,13 @@
 
 			<!-- TaskDialog (embedded, fills remaining space) -->
 			<div class="flex-1 min-h-0 overflow-hidden">
-				<TaskDialog {issue} embedded={true} />
+				<TaskDialog
+					{issue}
+					embedded={true}
+					onProposedChange={handleProposedChange}
+					{highlightedProposedId}
+					onSuggestionHover={handleDialogSuggestionHover}
+				/>
 			</div>
 		</div>
 	</div>

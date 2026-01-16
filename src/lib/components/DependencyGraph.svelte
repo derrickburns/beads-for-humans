@@ -16,14 +16,36 @@
 		human_assisted: { color: '#7c3aed', bgColor: '#ede9fe', icon: '💡', label: 'You+AI' }
 	};
 
+	// Proposed issue from AI suggestion (ghost node)
+	interface ProposedIssue {
+		id: string;           // Temporary ID for linking
+		title: string;
+		description?: string;
+		parentId?: string;    // Parent issue if it's a subtask
+		type?: string;
+	}
+
 	// Props
 	interface Props {
 		focusId?: string | null;
 		focusedIssueId?: string | null;
 		currentIssueId?: string | null;  // The issue currently being viewed (shows "YOU ARE HERE")
-		onNodeSelect?: (issueId: string) => void;  // Callback when a node is selected
+		proposedIssues?: ProposedIssue[];  // Ghost nodes from AI suggestions
+		highlightedProposedId?: string | null;  // Which proposed node to highlight (from dialog hover)
+		onNodeSelect?: (issueId: string) => void;  // Callback when a real node is selected
+		onProposedSelect?: (proposedId: string) => void;  // Callback when a ghost node is clicked
+		onProposedHover?: (proposedId: string | null) => void;  // Callback when hovering ghost node
 	}
-	let { focusId = null, focusedIssueId = $bindable<string | null>(null), currentIssueId = null, onNodeSelect }: Props = $props();
+	let {
+		focusId = null,
+		focusedIssueId = $bindable<string | null>(null),
+		currentIssueId = null,
+		proposedIssues = [],
+		highlightedProposedId = null,
+		onNodeSelect,
+		onProposedSelect,
+		onProposedHover
+	}: Props = $props();
 
 	// Layout constants
 	const NODE_WIDTH = 320;
@@ -543,10 +565,55 @@
 
 	let positions = $derived(layoutNodes(displayedIssues));
 
+	// Calculate positions for proposed (ghost) nodes
+	interface ProposedPosition {
+		proposed: ProposedIssue;
+		x: number;
+		y: number;
+		height: number;
+	}
+
+	let proposedPositions = $derived.by((): ProposedPosition[] => {
+		if (proposedIssues.length === 0) return [];
+
+		const results: ProposedPosition[] = [];
+
+		proposedIssues.forEach((proposed, index) => {
+			// Find parent position if this is a subtask
+			const parentPos = proposed.parentId
+				? positions.find(p => p.issue.id === proposed.parentId)
+				: null;
+
+			if (parentPos) {
+				// Position to the right of parent
+				results.push({
+					proposed,
+					x: parentPos.x + NODE_WIDTH + HORIZONTAL_GAP,
+					y: parentPos.y + (index * (NODE_MIN_HEIGHT + 20)),
+					height: NODE_MIN_HEIGHT
+				});
+			} else {
+				// Position at the end of the graph
+				const maxX = positions.length > 0
+					? Math.max(...positions.map(p => p.x)) + NODE_WIDTH + HORIZONTAL_GAP
+					: PADDING;
+				results.push({
+					proposed,
+					x: maxX,
+					y: PADDING + (index * (NODE_MIN_HEIGHT + 20)),
+					height: NODE_MIN_HEIGHT
+				});
+			}
+		});
+
+		return results;
+	});
+
 	let svgWidth = $derived.by(() => {
-		if (positions.length === 0) return 800;
-		const maxLayer = Math.max(...positions.map((p) => p.layer), 0);
-		return PADDING * 2 + (maxLayer + 1) * (NODE_WIDTH + HORIZONTAL_GAP);
+		if (positions.length === 0 && proposedPositions.length === 0) return 800;
+		const maxRealX = positions.length > 0 ? Math.max(...positions.map(p => p.x)) : 0;
+		const maxProposedX = proposedPositions.length > 0 ? Math.max(...proposedPositions.map(p => p.x)) : 0;
+		return Math.max(maxRealX, maxProposedX) + NODE_WIDTH + PADDING * 2;
 	});
 
 	let svgHeight = $derived.by(() => {
@@ -1312,6 +1379,73 @@
 								<circle cx="0" cy="0" r="3" fill="white" />
 							{/if}
 						</g>
+					</g>
+				{/each}
+
+				<!-- Ghost Nodes (Proposed Issues from AI Suggestions) -->
+				{#each proposedPositions as propPos}
+					{@const isHighlighted = highlightedProposedId === propPos.proposed.id}
+					<g
+						transform="translate({propPos.x}, {propPos.y})"
+						onclick={() => onProposedSelect?.(propPos.proposed.id)}
+						onmouseenter={() => onProposedHover?.(propPos.proposed.id)}
+						onmouseleave={() => onProposedHover?.(null)}
+						style="cursor: pointer;"
+						role="button"
+						tabindex="0"
+					>
+						<!-- Connecting line from parent -->
+						{#if propPos.proposed.parentId}
+							{@const parentPos = positions.find(p => p.issue.id === propPos.proposed.parentId)}
+							{#if parentPos}
+								{@const startX = -(HORIZONTAL_GAP)}
+								{@const startY = propPos.height / 2}
+								{@const endX = 0}
+								{@const endY = propPos.height / 2}
+								<path
+									d="M {startX} {startY} L {endX} {endY}"
+									stroke="#9333ea"
+									stroke-width="2"
+									stroke-dasharray="6,4"
+									fill="none"
+									opacity="0.6"
+								/>
+							{/if}
+						{/if}
+
+						<!-- Ghost node rectangle (dashed) -->
+						<rect
+							width={NODE_WIDTH}
+							height={propPos.height}
+							rx="10"
+							fill={isHighlighted ? '#faf5ff' : '#fefce8'}
+							stroke="#9333ea"
+							stroke-width={isHighlighted ? 3 : 2}
+							stroke-dasharray="8,4"
+							opacity={isHighlighted ? 1 : 0.8}
+							class="transition-all duration-200"
+						/>
+
+						<!-- "PROPOSED" badge -->
+						<g transform="translate({NODE_WIDTH / 2 - 40}, -20)">
+							<rect x="0" y="0" width="80" height="18" rx="9" fill="#9333ea" opacity="0.9" />
+							<text x="40" y="13" font-size="10" fill="white" text-anchor="middle" font-weight="bold">
+								PROPOSED
+							</text>
+						</g>
+
+						<!-- Status indicator (empty circle) -->
+						<circle cx="16" cy="20" r="5" fill="none" stroke="#9333ea" stroke-width="2" stroke-dasharray="2,2" />
+
+						<!-- Title -->
+						<text x="30" y="24" font-size="13" font-weight="600" fill="#7c3aed">
+							{propPos.proposed.title.length > 30 ? propPos.proposed.title.slice(0, 30) + '…' : propPos.proposed.title}
+						</text>
+
+						<!-- Type -->
+						<text x="30" y="40" font-size="11" fill="#a78bfa">
+							{propPos.proposed.type || 'task'} · click to accept
+						</text>
 					</g>
 				{/each}
 			</svg>

@@ -4,13 +4,25 @@
 	import { sessionState } from '$lib/stores/sessionState.svelte';
 	import type { Issue, IssueType, IssuePriority, DialogMessage as StoredDialogMessage, ImageAttachment, FileAttachment } from '$lib/types/issue';
 
+	// Proposed issue for graph ghost nodes
+	export interface ProposedIssue {
+		id: string;
+		title: string;
+		description?: string;
+		parentId?: string;
+		type?: string;
+	}
+
 	interface Props {
 		issue: Issue;
 		onClose?: () => void;
 		embedded?: boolean;  // When true, renders as panel instead of modal-style
+		onProposedChange?: (proposed: ProposedIssue[]) => void;  // Callback when suggestions change
+		highlightedProposedId?: string | null;  // Which suggestion to highlight (from graph hover)
+		onSuggestionHover?: (id: string | null) => void;  // Callback when hovering a suggestion
 	}
 
-	let { issue, onClose, embedded = false }: Props = $props();
+	let { issue, onClose, embedded = false, onProposedChange, highlightedProposedId = null, onSuggestionHover }: Props = $props();
 
 	interface DialogMessage {
 		role: 'user' | 'assistant';
@@ -64,6 +76,36 @@
 
 	// Get stored files for this issue
 	let storedFiles = $derived(issueStore.getFiles(issue.id));
+
+	// Extract pending create_subtask suggestions for graph ghost nodes
+	let pendingProposedIssues = $derived.by((): ProposedIssue[] => {
+		const proposed: ProposedIssue[] = [];
+		let counter = 0;
+
+		messages.forEach((msg, msgIndex) => {
+			if (msg.actions) {
+				msg.actions.forEach((action, actionIndex) => {
+					if (action.type === 'create_subtask' && !action.applied && action.data?.title) {
+						proposed.push({
+							id: `proposed_${msgIndex}_${actionIndex}`,
+							title: action.data.title,
+							description: action.data.description,
+							parentId: issue.id,
+							type: action.data.type || 'task'
+						});
+						counter++;
+					}
+				});
+			}
+		});
+
+		return proposed;
+	});
+
+	// Notify parent when proposed issues change
+	$effect(() => {
+		onProposedChange?.(pendingProposedIssues);
+	});
 
 	// Generate unique ID
 	function generateId(): string {
@@ -692,21 +734,30 @@
 							<div class="mt-3 pt-3 border-t {message.role === 'user' ? 'border-blue-500' : 'border-gray-200'} space-y-2">
 								{#each message.actions as action, actionIndex}
 									{#if action.type !== 'ask_question'}
+										{@const proposedId = action.type === 'create_subtask' ? `proposed_${messageIndex}_${actionIndex}` : null}
+										{@const isHighlightedFromGraph = proposedId && highlightedProposedId === proposedId}
 										<button
 											onclick={() => applyAction(messageIndex, actionIndex)}
+											onmouseenter={() => proposedId && onSuggestionHover?.(proposedId)}
+											onmouseleave={() => proposedId && onSuggestionHover?.(null)}
 											disabled={action.applied}
-											class="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors
+											class="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-all
 												{action.applied
 													? 'bg-green-100 text-green-700 cursor-default'
-													: message.role === 'user'
-														? 'bg-blue-500 text-white hover:bg-blue-400'
-														: 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+													: isHighlightedFromGraph
+														? 'bg-purple-100 text-purple-800 border-2 border-purple-400 ring-2 ring-purple-200'
+														: message.role === 'user'
+															? 'bg-blue-500 text-white hover:bg-blue-400'
+															: 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
 												}"
 										>
 											<span>{action.applied ? '✓' : actionIcons[action.type]}</span>
 											<span class="flex-1 text-left">
 												{action.applied ? 'Applied: ' : ''}{action.description}
 											</span>
+											{#if action.type === 'create_subtask' && !action.applied}
+												<span class="text-xs opacity-60">→ see graph</span>
+											{/if}
 										</button>
 									{/if}
 								{/each}
