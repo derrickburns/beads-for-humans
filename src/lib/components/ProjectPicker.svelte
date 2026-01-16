@@ -95,10 +95,6 @@
 	}
 
 	function handleEditKeydown(e: KeyboardEvent) {
-		// Stop propagation to prevent parent button from being triggered
-		e.stopPropagation();
-		e.stopImmediatePropagation();
-
 		if (e.key === 'Enter') {
 			e.preventDefault();
 			saveProjectName();
@@ -247,27 +243,52 @@
 						<div
 							class="bg-white rounded-xl shadow-sm border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all overflow-hidden"
 						>
-							<button
-								onclick={() => openProject(project)}
-								class="w-full p-5 text-left"
-							>
-								<div class="flex items-start justify-between">
-									<div class="flex-1 min-w-0">
-										<div class="flex items-center gap-2 mb-1">
-											{#if project.domain && domainMetadata[project.domain]}
-												<span class="text-2xl">{domainMetadata[project.domain].icon}</span>
-											{/if}
-											{#if editingProjectId === project.id}
+							{#if editingProjectId === project.id}
+								<!-- When editing, use a div instead of button to avoid space key issues -->
+								<div class="w-full p-5 text-left">
+									<div class="flex items-start justify-between">
+										<div class="flex-1 min-w-0">
+											<div class="flex items-center gap-2 mb-1">
+												{#if project.domain && domainMetadata[project.domain]}
+													<span class="text-2xl">{domainMetadata[project.domain].icon}</span>
+												{/if}
 												<input
 													type="text"
 													bind:value={editingName}
 													onkeydown={handleEditKeydown}
 													onblur={saveProjectName}
-													onclick={(e) => e.stopPropagation()}
 													class="text-lg font-semibold text-gray-900 px-2 py-1 border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
 													autofocus
 												/>
-											{:else}
+											</div>
+											{#if project.description}
+												<p class="text-sm text-gray-500 line-clamp-2 mb-2">
+													{project.description}
+												</p>
+											{/if}
+											<div class="flex items-center gap-4 text-sm text-gray-500">
+												<span>{project.issueCount} tasks</span>
+												<span class="text-green-600">{project.completedCount} completed</span>
+												<span>Last opened {formatDate(project.lastOpenedAt)}</span>
+											</div>
+										</div>
+										<svg class="w-5 h-5 text-gray-400 flex-shrink-0 ml-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+										</svg>
+									</div>
+								</div>
+							{:else}
+								<!-- When not editing, use button for click handling -->
+								<button
+									onclick={() => openProject(project)}
+									class="w-full p-5 text-left"
+								>
+									<div class="flex items-start justify-between">
+										<div class="flex-1 min-w-0">
+											<div class="flex items-center gap-2 mb-1">
+												{#if project.domain && domainMetadata[project.domain]}
+													<span class="text-2xl">{domainMetadata[project.domain].icon}</span>
+												{/if}
 												<h3
 													class="text-lg font-semibold text-gray-900 truncate hover:text-blue-600 cursor-text"
 													onclick={(e) => startEditingName(project, e)}
@@ -275,24 +296,24 @@
 												>
 													{project.name}
 												</h3>
+											</div>
+											{#if project.description}
+												<p class="text-sm text-gray-500 line-clamp-2 mb-2">
+													{project.description}
+												</p>
 											{/if}
+											<div class="flex items-center gap-4 text-sm text-gray-500">
+												<span>{project.issueCount} tasks</span>
+												<span class="text-green-600">{project.completedCount} completed</span>
+												<span>Last opened {formatDate(project.lastOpenedAt)}</span>
+											</div>
 										</div>
-										{#if project.description}
-											<p class="text-sm text-gray-500 line-clamp-2 mb-2">
-												{project.description}
-											</p>
-										{/if}
-										<div class="flex items-center gap-4 text-sm text-gray-500">
-											<span>{project.issueCount} tasks</span>
-											<span class="text-green-600">{project.completedCount} completed</span>
-											<span>Last opened {formatDate(project.lastOpenedAt)}</span>
-										</div>
+										<svg class="w-5 h-5 text-gray-400 flex-shrink-0 ml-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+										</svg>
 									</div>
-									<svg class="w-5 h-5 text-gray-400 flex-shrink-0 ml-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-									</svg>
-								</div>
-							</button>
+								</button>
+							{/if}
 
 							<!-- Delete button -->
 							<div class="border-t border-gray-100 px-5 py-2 bg-gray-50 flex justify-end">
