@@ -10,6 +10,7 @@
 	import Toast from '$lib/components/Toast.svelte';
 	import FollowUpSuggestions from '$lib/components/FollowUpSuggestions.svelte';
 	import PlanningAssistant from '$lib/components/PlanningAssistant.svelte';
+	import TaskDialog from '$lib/components/TaskDialog.svelte';
 
 	let id = $derived($page.params.id);
 	let issue = $derived(issueStore.getById(id));
@@ -46,6 +47,7 @@
 
 	let editing = $state(false);
 	let showDeleteConfirm = $state(false);
+	let showTaskDialog = $state(false);
 	let showAddDependency = $state(false);
 	let showAddBlocking = $state(false);
 	let showCreateRelated = $state(false);
@@ -361,6 +363,15 @@
 					</div>
 
 					<div class="flex items-center gap-2">
+						<button
+							onclick={() => (showTaskDialog = true)}
+							class="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-sm flex items-center gap-1.5"
+						>
+							<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+							</svg>
+							Talk About This
+						</button>
 						<a
 							href="/?focus={issue.id}"
 							class="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1.5"
@@ -784,6 +795,15 @@
 			</div>
 		</div>
 	{/if}
+{/if}
+
+<!-- Task Dialog Modal -->
+{#if showTaskDialog && issue}
+	<div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+		<div class="w-full max-w-lg h-[600px] max-h-[80vh]">
+			<TaskDialog {issue} onClose={() => (showTaskDialog = false)} />
+		</div>
+	</div>
 {/if}
 
 <!-- Toast notification -->
