@@ -278,7 +278,77 @@ Issues Found:
 
 Address each issue before starting execution.
 
-## Step 10: Start Executing
+## Step 10: Talk About a Task
+
+Some tasks need information from you. The AI Chief of Staff helps gather it.
+
+### Open the Dialog
+
+1. Click on "Select and configure tech stack"
+2. Click **"Talk About This"** in the task detail page
+
+### Have a Conversation
+
+The dialog opens. Start sharing what you know:
+
+**You:** "I'm thinking of using Next.js with Vercel"
+
+**AI:** "Next.js on Vercel - solid choice for a tech blog. Quick details: Will you use the free tier or a paid plan? Do you need custom server-side features, or is static generation enough? Also, for your domain, are you bringing an existing one or buying new?"
+
+### Let the AI Dig Deep
+
+The AI extracts maximum information. When you mention something, it asks for:
+- Missing details (plan type, features needed)
+- Related decisions (domain, hosting)
+- Things you might have forgotten
+
+### Apply Suggested Actions
+
+The AI suggests concrete actions:
+
+```
+[Create Subtask] "Configure Vercel deployment pipeline"
+[Create Subtask] "Set up Next.js project with static generation"
+[Update Task] Add decision: "Using Vercel free tier with upgrade path"
+```
+
+Click to accept the ones that make sense.
+
+### Close Anytime
+
+You can close the dialog mid-conversation. When you return (even days later), the AI remembers:
+
+- "Last time you decided on Next.js with Vercel..."
+- "You still hadn't picked a domain registrar - did you want Namecheap or Cloudflare?"
+
+## Step 11: Resume After Being Away
+
+Close Beads completely. When you reopen it:
+
+### See the Resume Panel
+
+The AI greets you with context:
+
+```
+Welcome back! You were last here 2 hours ago.
+
+On "Select and configure tech stack", you were discussing
+Next.js deployment options.
+
+[Continue where you left off →]
+
+I'm waiting for answers to:
+- Which domain registrar will you use?
+
+What needs attention:
+- [HIGH] Select and configure tech stack (in progress)
+```
+
+### Continue Seamlessly
+
+Click to continue. The AI picks up exactly where you left off—no need to re-explain anything.
+
+## Step 12: Start Executing
 
 ### Find Actionable Tasks
 
@@ -313,11 +383,22 @@ You've learned:
 5. **Dependencies**: Express ordering constraints between tasks
 6. **Scope Management**: Detect and handle scope expansion explicitly
 7. **Validation**: Verify plan accuracy before execution
-8. **Execution**: Work actionable tasks, watch status propagate
+8. **Task Dialog**: Have conversations with the AI to gather information
+9. **Session Continuity**: Resume seamlessly after being away
+10. **Execution**: Work actionable tasks, watch status propagate
+
+## Key Concepts
+
+The AI in Beads acts as your **Chief of Staff**:
+
+- **Drives the process** - Knows what needs to happen and guides you there
+- **Extracts information** - Asks detailed follow-up questions
+- **Never forgets** - Remembers all conversations across tasks
+- **Handles interruptions** - Picks up where you left off, even days later
 
 ## Next Steps
 
-- [How to Work with AI Assistants](../how-to/ai-assistants.md)
-- [How to Manage Multiple Projects](../how-to/multiple-projects.md)
-- [Concept: AND-OR Decomposition](../explanation/concepts.md#and-or-decomposition)
+- [How to Have a Productive Task Dialog](../how-to/planning-guide.md#how-to-have-a-productive-task-dialog)
+- [How to Resume Work After Being Away](../how-to/planning-guide.md#how-to-resume-work-after-being-away)
+- [Concept: Chief of Staff Model](../explanation/concepts.md#human-ai-collaboration-the-chief-of-staff-model)
 - [Reference: API Documentation](../reference/api.md)

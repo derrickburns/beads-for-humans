@@ -180,9 +180,65 @@ Constraints are explicit limitations on a project:
 
 Constraints inherit down the hierarchy. A budget constraint on a goal applies to all its children.
 
-## Human-AI Collaboration
+## Human-AI Collaboration: The Chief of Staff Model
 
-Beads tracks who can do what work:
+Beads reimagines AI assistance. The AI isn't a passive tool waiting for instructions—it's your Chief of Staff.
+
+### The Chief of Staff Role
+
+Like a Chief of Staff in an organization, the AI:
+
+- **Drives the process** - Knows what needs to happen and guides conversations toward it
+- **Manages details** - Tracks everything so you don't have to
+- **Adapts to engagement** - Takes the lead when you're passive, supports when you're driving
+- **Defers on authority** - You make the decisions; it executes and tracks
+
+### The Nosey Neighbor Pattern
+
+Every conversation should leave with a LOT of useful information. When you mention something, the AI doesn't just acknowledge—it digs deeper:
+
+**User:** "I have Geico for auto insurance"
+
+**Bad AI:** "Great, got it. Anything else?"
+
+**Good AI (Beads):** "Geico auto - got it. Quick details: What's the policy number? Coverage limits? When does it renew? Also, most people have 2+ vehicles - do you have others on this policy?"
+
+The AI uses domain knowledge to:
+- Ask for missing details (policy #, amounts, dates, contacts)
+- Probe for related items you might have forgotten
+- Suggest specific likely items from its knowledge base
+
+### Long-Term Memory
+
+The AI never forgets. Every conversation is persisted with the task and available as context for future interactions.
+
+- **On this task**: Full dialog history is preserved
+- **Related tasks**: Parent, sibling, and blocker task conversations are included as context
+- **Never re-ask**: If you answered a question before, the AI references it instead of asking again
+
+When you return after being away:
+- The AI reminds you where you were
+- States what it still needs
+- Offers easy ways to continue
+
+### Handling Interruptions
+
+You may close the app mid-conversation, give incomplete answers, or disappear for days. The AI handles this gracefully:
+
+- **Incomplete answers**: Accepts whatever you give, notes what's missing for later
+- **Abrupt closure**: Tracks what was being discussed for when you return
+- **Long absence**: Provides context summary and prioritized action list on return
+
+### AI Agenda
+
+The AI maintains its own agenda—what it wants to do, ask, or gather:
+
+- **Pending Questions**: Things it needs you to answer
+- **Resources Needed**: Web pages, documents, or data it wants to fetch
+- **Access Requests**: Services it wants read access to (to gather info automatically)
+- **Background Tasks**: Work it can do without you
+
+This enables proactive behavior: the AI works on what it can while you're away, and comes to you only with what requires your input.
 
 ### Execution Types
 
@@ -206,6 +262,28 @@ Tasks get flagged for human attention when:
 - AI reports being blocked
 - Timeout (no activity for 15 minutes)
 - User explicitly flags it
+
+## Session Continuity
+
+Beads maintains session state to ensure seamless continuation of work.
+
+### What's Tracked
+
+- **Last task**: Which task you were working on
+- **Last interaction**: When you last engaged
+- **Pending questions**: What the AI is waiting to have answered
+- **Prioritized work**: What needs attention, in order of urgency
+
+### Resume Experience
+
+When you return to Beads, you see:
+
+1. **Context reminder**: "Welcome back! You were working on documenting insurance policies..."
+2. **Continue button**: Jump right back to where you were
+3. **Pending questions**: "I'm still waiting to know your policy number"
+4. **Prioritized work queue**: High-priority and stale items that need attention
+
+This eliminates the "where was I?" problem. The AI remembers so you don't have to.
 
 ## The Planning Workflow
 

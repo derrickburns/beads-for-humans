@@ -235,6 +235,90 @@ interface NeedsHumanReason {
 }
 ```
 
+### DialogMessage
+
+A message in the task conversation history.
+
+```typescript
+interface DialogMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  urlsReferenced?: string[];   // URLs the user shared
+  actionsApplied?: string[];   // Actions taken from this message
+}
+```
+
+### AIAgendaItem
+
+An item in the AI's agenda - something it wants to do, ask, or gather.
+
+```typescript
+interface AIAgendaItem {
+  id: string;
+  type: 'question' | 'resource_request' | 'background_task' | 'access_request';
+  priority: 'blocking' | 'important' | 'nice_to_have';
+  status: 'pending' | 'in_progress' | 'completed' | 'blocked';
+  createdAt: string;
+  completedAt?: string;
+
+  // For questions
+  question?: string;
+  context?: string;
+  suggestedAnswers?: string[];
+
+  // For resource requests
+  resourceType?: 'web_page' | 'document' | 'api' | 'account';
+  resourceUrl?: string;
+  resourceDescription?: string;
+
+  // For access requests
+  accessType?: 'read' | 'write' | 'admin';
+  serviceName?: string;
+  whyNeeded?: string;
+
+  // For background tasks
+  taskDescription?: string;
+  canRunWithoutHuman?: boolean;
+  estimatedDuration?: string;
+}
+```
+
+### AIAgenda
+
+The AI's agenda for a task - what it's tracking and waiting for.
+
+```typescript
+interface AIAgenda {
+  items: AIAgendaItem[];
+  lastUpdated: string;
+  nextHumanQuestion?: string;
+}
+```
+
+### SessionState
+
+Session tracking for continuity.
+
+```typescript
+interface SessionState {
+  lastTaskId: string | null;
+  lastTaskTitle: string | null;
+  lastInteractionAt: string | null;
+  pendingQuestions: PendingQuestion[];
+  sessionStartedAt: string | null;
+  totalInteractions: number;
+}
+
+interface PendingQuestion {
+  taskId: string;
+  taskTitle: string;
+  question: string;
+  askedAt: string;
+  context?: string;
+}
+```
+
 ---
 
 ## Store Methods
@@ -527,6 +611,42 @@ issueStore.getConcernsByTier(goalId: string): Record<
 >
 ```
 
+### Dialog History
+
+#### addDialogMessage(issueId, message)
+Add a message to a task's dialog history.
+
+```typescript
+issueStore.addDialogMessage(
+  issueId: string,
+  message: {
+    role: 'user' | 'assistant';
+    content: string;
+    urlsReferenced?: string[];
+    actionsApplied?: string[];
+  }
+): Issue | undefined
+```
+
+#### getDialogHistory(issueId)
+Get the dialog history for a task.
+
+```typescript
+issueStore.getDialogHistory(issueId: string): DialogMessage[]
+```
+
+#### getRelatedDialogContext(issueId)
+Get dialog history from related tasks (parent, siblings, blockers).
+
+```typescript
+issueStore.getRelatedDialogContext(issueId: string): Array<{
+  issueId: string;
+  issueTitle: string;
+  relationship: 'parent' | 'sibling' | 'child' | 'blocker';
+  messages: Array<{ role: 'user' | 'assistant'; content: string; timestamp: string }>;
+}>
+```
+
 ### Plan Accuracy
 
 #### checkPlanAccuracy(goalId)
@@ -759,6 +879,99 @@ Suggest dependencies between issues.
     reason: string;
     confidence: number;
   }>;
+}
+```
+
+### POST /api/task-dialog
+
+Conversational AI for task information gathering. The AI acts as a Chief of Staff, proactively extracting information and suggesting actions.
+
+#### Request
+```typescript
+{
+  task: Issue;                    // The task being discussed
+  message: string;                // User's message
+  history: DialogMessage[];       // Prior conversation
+  context: {
+    ancestors: IssueRef[];        // Parent chain
+    parent: IssueRef | null;      // Direct parent
+    siblings: IssueRef[];         // Same-level tasks
+    children: IssueRef[];         // Child tasks
+    blockedBy: IssueRef[];        // Blocking dependencies
+    blocks: IssueRef[];           // Tasks waiting on this
+    constraints: ConstraintRef[]; // Active constraints
+    scopeBoundary: ScopeBoundary | null;
+    successCriteria: string[];
+    existingConcerns: ConcernRef[];
+    projectIssues: IssueRef[];    // Other relevant issues
+    relatedDialogs?: RelatedDialogRef[]; // Conversations from related tasks
+  };
+  urlContents?: Array<{ url: string; content: string }>; // Fetched web content
+  model?: string;
+  apiKey?: string;
+}
+```
+
+#### Response
+```typescript
+{
+  response: string;               // AI's conversational response
+  actions: Array<{
+    type: 'update_task' | 'create_subtask' | 'mark_complete' |
+          'add_dependency' | 'add_concern' | 'add_constraint' | 'update_scope';
+    description: string;
+    data?: {
+      title?: string;
+      description?: string;
+      type?: IssueType;
+      priority?: IssuePriority;
+      concernType?: string;
+      constraintType?: string;
+      scopeUpdate?: Partial<ScopeBoundary>;
+    };
+  }>;
+  agenda: {
+    pendingQuestions?: Array<{
+      question: string;
+      priority?: 'blocking' | 'important' | 'nice_to_have';
+      context?: string;
+    }>;
+    resourcesNeeded?: Array<{
+      type?: 'web_page' | 'document' | 'api' | 'account';
+      url?: string;
+      description?: string;
+      whyNeeded?: string;
+    }>;
+    accessRequests?: Array<{
+      service?: string;
+      accessType?: 'read' | 'write' | 'admin';
+      whyNeeded?: string;
+    }>;
+    backgroundTasks?: Array<{
+      description?: string;
+      canRunWithoutHuman?: boolean;
+    }>;
+  };
+}
+```
+
+### POST /api/fetch-url
+
+Fetch and extract content from a web page.
+
+#### Request
+```typescript
+{
+  url: string;
+}
+```
+
+#### Response
+```typescript
+{
+  content: string;          // Extracted text content
+  contentType: 'html' | 'json' | 'text';
+  error?: string;
 }
 ```
 

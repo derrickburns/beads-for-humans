@@ -279,6 +279,91 @@ The system has surfaced concerns and you need to work through them.
 
 ---
 
+## How to Have a Productive Task Dialog
+
+### Problem
+You need to gather or provide information about a task, and you want the AI to help you be thorough.
+
+### Solution
+
+1. **Open any task** and click "Talk About This"
+2. **Start with what you know**: "I have Geico for auto insurance"
+3. **Let the AI dig deeper**: It will ask for related details (policy #, coverage, etc.)
+4. **Share URLs if helpful**: Paste links and the AI will extract relevant content
+5. **Accept suggested actions**: The AI will suggest creating subtasks, updating descriptions, etc.
+6. **Close anytime**: Your conversation is saved automatically
+
+### What the AI Does
+
+The AI acts as your Chief of Staff:
+
+- **Extracts maximum information** - Asks for missing details, probes for related items
+- **Uses domain knowledge** - Suggests specific things you might have forgotten
+- **Creates concrete actions** - Turns conversation into subtasks, updates, concerns
+- **Never re-asks** - If you mentioned something before, it remembers
+
+### Example Conversation
+
+**User:** "I have Geico for auto insurance"
+
+**AI:** "Geico auto - got it. Quick details: What's the policy number? Coverage limits? When does it renew? Also, most people have 2+ vehicles - do you have others on this policy?"
+
+**[Suggests action: Create subtask "Document Geico auto policy details"]**
+
+**User:** "Policy is 123456, $100k/$300k liability. I also have State Farm for home."
+
+**AI:** "Got it - Geico policy 123456 with $100k/$300k liability. And State Farm homeowner's. For the State Farm policy, what are the coverage limits and deductible? Also, do you have any other insurance - life, umbrella, health?"
+
+### Tips
+
+- You can close mid-conversation - the AI will pick up where you left off
+- Share URLs to documents for the AI to extract details
+- Let the AI suggest subtasks rather than creating them manually
+- The AI tracks what's still needed and will remind you later
+
+---
+
+## How to Resume Work After Being Away
+
+### Problem
+You closed the app and don't remember where you were.
+
+### Solution
+
+1. **Open Beads** - The resume panel shows automatically
+2. **See your context**:
+   - "Welcome back! You were working on documenting insurance policies..."
+   - "Last time you mentioned having Geico auto insurance..."
+3. **Continue where you left off**: Click "Continue" to reopen that task dialog
+4. **Or address pending items**: The AI shows what it's waiting for
+5. **Or tackle prioritized work**: High-priority and stale items are listed
+
+### What the AI Tracks
+
+- **Last task**: Which task you were working on
+- **Pending questions**: What the AI asked but you didn't answer
+- **Work queue**: Tasks needing attention, prioritized by urgency
+
+### Example Resume
+
+```
+Welcome back! You were last here 2 days ago.
+
+On "Document insurance policies", I had asked about your
+homeowner's policy deductible.
+
+[Continue where you left off →]
+
+I'm waiting for answers to:
+- What is your State Farm deductible? (Document insurance policies)
+
+What needs attention:
+- [HIGH] Complete auto insurance documentation (P1)
+- [MEDIUM] Review life insurance options (in progress, stale)
+```
+
+---
+
 ## How to Assign Work to AI
 
 ### Problem
