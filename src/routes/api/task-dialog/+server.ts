@@ -715,6 +715,36 @@ Use these entity names consistently:
 			}
 		}
 
+		// FALLBACK: Extract subtasks from numbered lists if AI didn't include actions
+		// This ensures ghost nodes appear even if the model doesn't follow instructions
+		const existingSubtaskTitles = new Set(
+			actions
+				.filter(a => a.type === 'create_subtask')
+				.map(a => a.data?.title?.toLowerCase())
+		);
+
+		// Match numbered list items like "1. **Title:** description" or "1. **Title**\n   - description"
+		const numberedListPattern = /^\s*\d+\.\s*\*\*([^*:]+?)(?::\*\*|\*\*:?)\s*(.*)$/gm;
+		let match;
+		while ((match = numberedListPattern.exec(responseText)) !== null) {
+			const title = match[1].trim();
+			const description = match[2].trim().replace(/^[-–]\s*/, '');
+
+			// Skip if we already have an action for this
+			if (existingSubtaskTitles.has(title.toLowerCase())) continue;
+
+			// Add as a create_subtask action
+			actions.push({
+				type: 'create_subtask',
+				description: `Create subtask: ${title}`,
+				data: {
+					title,
+					description: description || undefined,
+					type: 'task' as IssueType
+				}
+			});
+		}
+
 		return json({
 			response: responseText,
 			actions,
